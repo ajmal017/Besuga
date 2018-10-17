@@ -1,2 +1,2 @@
 # Besuga
-waithg for Gontech
+waiting for Gontech
