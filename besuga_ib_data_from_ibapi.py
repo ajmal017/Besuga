@@ -49,7 +49,7 @@ for p in pos:
     #print(p.account, p.tag, p.value, p.currency)
    # position.append(p)
     #position.append((p.account,p.contract,p.position,p.avgCost))
-    position.append(p.contract)
+    position.append(p)
 dfPoaition = pd.DataFrame(position)
 print(dfPoaition)
 
@@ -70,9 +70,42 @@ for p in pfl:
     port.append(p)
 dfPort = pd.DataFrame(port)
 print(dfPort)
-#IB CONTRACT
 
+
+#IB CONTRACT
 con = Contract()
 print ("IB.CONTRACT\n")
-
 print (con)
+
+#IB EXECUTIONS
+print ("IB.EXECUTIONS\n")
+exe = ib.executions()
+print("executions     ",exe)
+execution =[]
+a=0
+for p in exe:
+    print(exe[a])
+    a = a + 1
+    #print(p.account, p.tag, p.value, p.currency)
+   # position.append(p)
+    #position.append((p.account,p.contract,p.position,p.avgCost))
+    execution.append(p)
+dfexecution = pd.DataFrame(execution)
+print(dfexecution)
+
+
+#IB FILLS
+print ("IB.FILLS\n")
+fil = ib.fills()
+print("fills     ",fil)
+fills =[]
+a=0
+for p in fil:
+    print(fil[a])
+    a = a + 1
+    #print(p.account, p.tag, p.value, p.currency)
+   # position.append(p)
+    #position.append((p.account,p.contract,p.position,p.avgCost))
+    fills.append(p)
+dffills = pd.DataFrame(fills)
+print(dffills)
