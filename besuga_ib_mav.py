@@ -271,48 +271,48 @@ def portfolioAnalysis():
 #def ultimesRutines():
 
 
+if __name__ == "__main__":
+
+    # determinem paràmetres gestió portfolio
+    pctProfitTarget = 90
 
 
-# determinem paràmetres gestió portfolio
-pctProfitTarget = 90
+    # MAIN BODY
 
+    #importem llibreries
+    import numpy as np
+    from ib_insync import *
+    import openpyxl as op
+    import pandas as pd
+    import os
+    import datetime
 
-# MAIN BODY
+    #connectem a IB
+    ib = IB()
+    # determinem paràmtrees connexio
+    #ip= '127.0.0.1'
+    #port= 7496
+    #clientid=1
+    connectIBAPI()
 
-#importem llibreries
-import numpy as np
-from ib_insync import *
-import openpyxl as op
-import pandas as pd
-import os
-import datetime
+    #getCurrentDir()
+    #createWB()
 
-#connectem a IB
-ib = IB()
-# determinem paràmtrees connexio
-#ip= '127.0.0.1'
-#port= 7496
-#clientid=1
-connectIBAPI()
+    #importFromExcel()
+    # inicialització de variables etc
+    #initCoses()
 
-#getCurrentDir()
-#createWB()
+    # analitzem Accoount
+    accountAnalysis()
 
-#importFromExcel()
-# inicialització de variables etc
-#initCoses()
+    # analitzem posicions obertes
+    portfolioAnalysis()
 
-# analitzem Accoount
-accountAnalysis()
-
-# analitzem posicions obertes
-portfolioAnalysis()
-
-# fem últimes rutines
-#ultimesRutines()
+    # fem últimes rutines
+    #ultimesRutines()
 
 
 
-# desconnectem de IBAPI
-ibDisconnect()
+    # desconnectem de IBAPI
+    ibDisconnect()
 
