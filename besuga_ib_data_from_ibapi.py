@@ -7,6 +7,34 @@ import openpyxl as op
 import pandas as pd
 import os
 
+
+def portfolio_to_dict(ib_):
+    try:
+        pfl = ib_.portfolio()
+        # dictionary de lists que contindrà les dades que volem recuperar de l'objecte Contract per cada PortfolioItem del Portfolio
+        d_contr = {'secType': [], 'conId': [], 'symbol': [], 'exchange': [], 'primaryExchange': [], 'currency': [], 'localSymbol': []}
+        # OrderedDict de lists que contindrà les dades que volem recuperar de la namedtupla PortfolioItem (excepte els detalls del Contract) per cada PortfolioItem del Portfolio del Portfolio
+        d_pfl = {'position': [], 'marketPrice': [], 'marketValue': [],'averageCost': [], 'unrealizedPNL': [], 'realizedPNL': [], 'account': []}
+        # recorrem tots els PortfoioItema Portfolio
+        for i in range(len(pfl)):
+            ib_.qualifyContracts(pfl[i].contract)
+            for k in d_contr.keys():
+                # afegim els valors (cada value de (key,value) és una llista) de cada atribut que recuperem de l'objecte Contract d'aquest PortfolioItem.
+                d_contr[k].append(getattr(pfl[i].contract, k))
+            for k in d_pfl.keys():
+                # afegim els valors (cada value de (key,value) és una llista) de cada valor que m'interessa de Portfolio Item ( a part dels detalls del contracte, recuperats abans)
+                d_pfl[k].append(getattr(pfl[i], k))
+        # posem tota la informació al dictionary pfl_values
+        d_pfl.update(d_contr)
+        # ordenem i retornem un OrderedDict
+        my_order=['conId', 'symbol', 'localSymbol', 'currency', 'secType', 'position', 'averageCost', 'marketPrice', 'marketValue', 'unrealizedPNL', 'realizedPNL']
+        od_pfl = OrderedDict((k, d_pfl[k]) for k in my_order)
+        return od_pfl
+    except Exception as e:
+        msg='Exception in function portfolio_to_dict \n'
+        error_handling(e, msg)
+        raise
+
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=1)
 
