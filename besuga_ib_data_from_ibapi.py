@@ -121,7 +121,6 @@ for p in exe:
 dfexecution = pd.DataFrame(execution)
 print(dfexecution)
 
-
 #IB FILLS
 print ("IB.FILLS\n")
 fil = ib.fills()
@@ -129,11 +128,38 @@ print("fills     ",fil)
 fills =[]
 a=0
 for p in fil:
-    print(fil[a])
+    subfills =[]
+    time =""
+
+    #print(fil[a])
     a = a + 1
     #print(p.account, p.tag, p.value, p.currency)
    # position.append(p)
     #position.append((p.account,p.contract,p.position,p.avgCost))
-    fills.append(p)
+    #fills.append(p)
+    subfills.append(p.contract.secType)
+    subfills.append(p.contract.conId)
+    subfills.append(p.contract.symbol)
+    subfills.append(p.contract.strike)
+    subfills.append(p.contract.right)
+    subfills.append(p.contract.multiplier)
+    subfills.append(p.contract.currency)
+
+
+    subfills.append(p.execution.acctNumber)
+    subfills.append(p.execution.side)
+    subfills.append(p.execution.shares)
+    subfills.append(p.execution.price)
+    subfills.append(p.execution.cumQty)
+    subfills.append(p.execution.avgPrice)
+    time = str(p.time)[0:4]+str(p.time)[5:7]+str(p.time)[8:10]
+
+    subfills.append(time)
+
+    fills.append(subfills)
+    print (subfills)
 dffills = pd.DataFrame(fills)
+
 print(dffills)
+#print(fills)
+
