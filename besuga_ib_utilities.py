@@ -53,3 +53,37 @@ def makeform(root, fields):
 if __name__ == '__main__':
 
     print('hola')
+    
+# calcula dies distància entre dues dates
+def diffdaysfromtoday(date1):
+    #entrem la data en format 20181026
+    #calculem la distància en dies respecte a avui de ña data emtrada em termes absoluts
+    from datetime import date, datetime
+    t1 = str(date.today())
+    t2 = date1
+    tf1= str(t1)[0:4] + ","+ str(t1)[5:7] + "," + str(t1)[8:10]
+    tf2 = str(t2)[0:4] + "," + str(t2)[4:6] + "," + str(t2)[6:8]
+    tf1 = datetime.strptime(tf1, "%Y,%m,%d")
+    tf2 = datetime.strptime(tf2, "%Y,%m,%d")
+    delta = tf2 - tf1
+    print(abs(delta.days))
+    return abs(delta.days)
+
+# calcula dies de distància des de datetoday
+def diffdays(date1,date2):
+    #entrem les dates en format 20181026, l'ordre de les datas és indiferent
+    #caluulem la distància en dies entre les dues dates en termes absoluts
+    from datetime import date, datetime
+    if date1 <= date2:
+        t1 = date1
+        t2 = date2
+    else:
+        t1 = date2
+        t2 = date1
+    tf1 = str(t1)[0:4] + "," + str(t1)[4:6] + "," + str(t1)[6:8]
+    tf2 = str(t2)[0:4] + "," + str(t2)[4:6] + "," + str(t2)[6:8]
+    tf1 = datetime.strptime(tf1, "%Y,%m,%d")
+    tf2 = datetime.strptime(tf2, "%Y,%m,%d")
+    delta = tf2 - tf1
+    print(abs(delta.days))
+    return abs(delta.days)
