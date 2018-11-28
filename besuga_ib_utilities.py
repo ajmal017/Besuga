@@ -53,7 +53,7 @@ def makeform(root, fields):
     return fields
 
     
-# calcula dies distància entre dues dates
+# calcula dies distància des de datetoday
 def diffdaysfromtoday(date1):
     #entrem la data en format 20181026
     #calculem la distància en dies respecte a avui de ña data emtrada em termes absoluts
@@ -69,7 +69,7 @@ def diffdaysfromtoday(date1):
     return abs(delta.days)
 
 
-# calcula dies de distància des de datetoday
+# calcula dies de distància entre dues dates
 def diffdays(date1,date2):
     #entrem les dates en format 20181026, l'ordre de les datas és indiferent
     #caluulem la distància en dies entre les dues dates en termes absoluts
