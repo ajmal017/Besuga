@@ -73,18 +73,25 @@ def get_executions(ib):
             ib.qualifyContracts(execs[i].contract)
             ib.reqMarketDataType(4)
             opt = ib.reqMktData(execs[i].contract, '', False, False)
-            while (opt.lastGreeks == None):  # mini-bucle per esperar que es rebin els Greeks
-                ib.sleep(5)
+            l = 0
+            while (opt.lastGreeks == None) and l < 5:  # mini-bucle per esperar que es rebin els Greeks
                 opt = ib.reqMktData(execs[i].contract, '', False, False)
+                ib.sleep(5)
+                l += 1
+                print ('OPT blucle', opt)
             opt = ib.reqMktData(execs[i].contract, '100,101,105,106,107', False, False)
-            lst2.append(opt.lastGreeks.optPrice)           #lst2[8]
-            lst2.append(opt.lastGreeks.impliedVol)         #lst2[9]
-            lst2.append(opt.lastGreeks.delta)              #lst2[10]
-            lst2.append(opt.lastGreeks.gamma)              #lst2[11]
-            lst2.append(opt.lastGreeks.vega)               #lst2[12]
-            lst2.append(opt.lastGreeks.theta)              #lst2[13]
-            lst2.append(opt.lastGreeks.pvDividend)         #lst2[14]
-            lst2.append(opt.lastGreeks.undPrice)           #lst2[15]
+            print ('OPT fora blucle', opt)
+            if (opt.lastGreeks is not None):
+                lst2.append(opt.lastGreeks.optPrice)           #lst2[8]
+                lst2.append(opt.lastGreeks.impliedVol)         #lst2[9]
+                lst2.append(opt.lastGreeks.delta)              #lst2[10]
+                lst2.append(opt.lastGreeks.gamma)              #lst2[11]
+                lst2.append(opt.lastGreeks.vega)               #lst2[12]
+                lst2.append(opt.lastGreeks.theta)              #lst2[13]
+                lst2.append(opt.lastGreeks.pvDividend)         #lst2[14]
+                lst2.append(opt.lastGreeks.undPrice)           #lst2[15]
+            else:
+                lst2.extend([0, 0, 0, 0, 0, 0, 0, 0])
         else:
             # si no és una opció, ho deixem amb 0's
             lst2.extend([0, 0, 0, 0, 0, 0, 0, 0])
@@ -289,22 +296,6 @@ def dbfill_executions(db, execs):
                 raise
 
 
-#   inserts contracts when contract not in table mysql.contract
-#   it can only be an 'INSERT' statement since a contract never changes
-def dbfill_openpositions(db, pos):
-    try:
-        # fem un delete all + insert per mantenir la consistència
-        for i in range(len(pos)):
-            execute_query(db, "DELETE FROM openpositions WHERE pOpen = 1")
-            for i in range(len(pos)):
-                sql = "INSERT INTO openpositions (pAccId, pConId, pPosition, pOpen, pMarketPrice, pMarketValue, pInitialPrice, pAverageCost, pUnrealizedPNL, pRealizedPNL) "
-                sql = sql + "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s )"
-                execute_query(db, sql, values = tuple(pos[i]))
-    except Exception as err:
-        print(err)
-        raise
-
-
 def dbupdate_executions(db, execs):
     # execs[i] conté [tId, tExecId, tConId, tShares, tPrice, tActive]
     try:
@@ -329,74 +320,17 @@ def dbupdate_executions(db, execs):
         print(err)
         raise
 
-# NOT USED ANYMORE
-def OLD_dbupdate_positions(db, execs):
-    # execs[i] conté [ctId, ctExecId, ctConId, ctType, ctMultiplier, ctShares, ctPrice, ctDate, ctCommission, ctLiquidation, ctoptPrice, ctoptIV, ctoptDelta, ctoptGamma,
-    # ctoptTheta, ctoptVega, ctoptPVDividend, ctoptPriceOfUnderlying, ctActive
-    # Si ctActive='C', llavors execs[i][19]=[execs[j]], on execs[j] és l'execució que tanca execs[i]
-    try:
-        for i in range(len(execs)):
-            # mirem si la posició existeix ja ala taula positions
-            sql = "SELECT * from positions WHERE pId = " + str(execs[i][0])
-            check = execute_query(db, sql)
-            if check:
-                if execs[i][18] == 'C':
-                    clist = execs[i][19]
-                    sql = "UPDATE positions set pActive = %s, pShares = %s, pClosingPrice = %s, pClosingValue = %s, pClosingDate = %s, pClosingId = %s, pPNL = %s, pCommission = %s, pLiquidation = %s " \
-                        + "WHERE pId = " + str(execs[i][0])
-                    pnl = -(execs[i][5]*execs[i][6] + clist[5]*clist[6])*execs[i][4]
-                    val = (0, clist[5], clist[6], clist[4]*abs(clist[5])*clist[6], clist[7], clist[0], pnl, execs[i][8]+clist[8], clist[9])
-                    execute_query(db, sql, values = val)
-                    if execs[i][3] == 'OPT':
-                        sql = "UPDATE positions_optiondetails set podFinalModelPrice = %s, podFinalIV = %s, podFinalDelta = %s, podFinalGamma = %s, podFinalTheta = %s,  " \
-                            + "podFinalVega = %s, podFinalPVDividend = %s, podFinalPriceOfUnderlying = %s " \
-                            + "WHERE podId = " + str(execs[i][0])
-                        val = (clist[10], clist[11], clist[12], clist[13], clist[14], clist[15], clist[16], clist[17])
-                        execute_query(db, sql, values = val)
-                elif execs[i][18] == 'D':
-                    sql = "DELETE FROM position_optiondetails where podId = " + str(execs[i][0])
-                    execute_query(db, sql)
-                    sql = "DELETE from positions where pid = " + str(execs[i][0])
-                # si execs[i]18] == 1 no cal fer res
-            elif execs[i][18] != 'D':
-                sql = "INSERT INTO positions (pId, pExecid, pAccId, pConId, pDate, pType, pMultiplier, pShares, pInitialPrice, pInitialValue, pCommission, pLiquidation, pActive) " \
-                    + "SELECT ctId, ctExecId, ctAccId, ctConId, ctDate, ctType, ctMultiplier, ctShares, ctPrice, ctPrice*abs(ctShares)*ctMultiplier, ctCommission, ctLiquidation, ctActive " \
-                    + "FROM combinedtrades WHERE ctID = " + str(execs[i][0])
-                execute_query(db, sql)
-                if execs[i][3] == 'OPT':
-                    sql = "INSERT INTO positions_optiondetails (podId, podInitialModelPrice, podInitialIV, podInitialDelta, podInitialGamma, podInitialVega, " \
-                        + "podInitialTheta, podInitialPVDividend, podInitialPriceOfUnderlying) " \
-                        + "SELECT ctId, ctoptPrice, ctoptIV, ctoptDelta, ctoptGamma, ctoptVega, ctoptTheta, ctoptPVDividend, ctoptPriceOfUnderlying " \
-                        + "FROM combinedtrades WHERE ctID = " + str(execs[i][0])
-                    execute_query(db, sql)
-                if execs[i][18] == 'C':
-                    clist = execs[i][19]
-                    sql = "UPDATE positions set pActive = %s, pClosingPrice = %s, pClosingValue = %s, pClosingDate = %s, pClosingId = %s, pPNL = %s, pCommission = %s, pLiquidation = %s " \
-                        + "WHERE pId = " + str(execs[i][0])
-                    pnl = -(execs[i][5]*execs[i][6] + clist[5]*clist[6])*execs[i][4]
-                    val = (0, clist[6], clist[4] * abs(clist[5]) * clist[6], clist[7], clist[0], pnl, execs[i][8] + clist[8], clist[9])
-                    execute_query(db, sql, values = val)
-                    if execs[i][3] == 'OPT':
-                        sql = "UPDATE positions_optiondetails set podFinalModelPrice = %s, podFinalIV = %s, podFinalDelta = %s, podFinalGamma = %s, podFinalTheta = %s,  " \
-                            + "podFinalVega = %s, podFinalPVDividend = %s, podFinalPriceOfUnderlying = %s " \
-                            + "WHERE podId = " + str(execs[i][0])
-                        val = (clist[10], clist[11], clist[12], clist[13], clist[14], clist[15], clist[16], clist[17])
-                        execute_query(db, sql, values = val)
-    except Exception as err:
-        print(err)
-        raise
-
-
+# ATENCIÓ: S'HA DE MODIFICAR PERQUÈ EL DELETE TINGUI EN COMPTE l'ACCID
 def dbfill_positions(db, execs):
     # execs[i] conté [ctId, ctExecId, ctConId, ctType, ctMultiplier, ctShares, ctPrice, ctDate, ctCommission, ctLiquidation, ctoptPrice, ctoptIV, ctoptDelta, ctoptGamma,
     # ctoptTheta, ctoptVega, ctoptPVDividend, ctoptPriceOfUnderlying, ctActive
     # Si ctActive='C', llavors execs[i][19]=[execs[j]], on execs[j] és l'execució que tanca execs[i]
     try:
         # borrem la taula de positions)position_optiondetails i després farem inserts del què tenim a execs
-        sql = "DELETE FROM positions_optiondetails"
+        sql = "DELETE FROM positions_optiondetails where "
         count = execute_query(db, sql, commit = False)
         print('Deleted ' + str(count) + ' rows in table positions_optiondetails')
-        sql = "DELETE FROM positions"
+        sql = "DELETE FROM positions WHERE pAccId = "
         count = execute_query(db, sql, commit = False)
         print('Deleted ' + str(count) + ' rows in table positions')
         dbcommit(db)
@@ -436,7 +370,8 @@ if __name__ == '__main__':
     myib = IB()
     mydb = dbconnect()
 
-    rslt = execute_query(mydb,"SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+    #rslt = execute_query(mydb,"SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+    rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
     myib.connect(rslt[0][0], rslt[0][1], 1)
     myaccId = rslt[0][2]
 
