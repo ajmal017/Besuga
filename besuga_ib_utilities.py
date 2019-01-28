@@ -81,3 +81,46 @@ def diffdays(date1,date2):
     tf1 = datetime.strptime(tf1, "%Y,%m,%d")
     tf2 = datetime.strptime(tf2, "%Y,%m,%d")
     delta = tf2 - tf1
+    # print(abs(delta.days))
+    return abs(delta.days)
+
+def dbconnect(hname, dbname, uname, pwd):
+    try:
+        cnx = mysql.connector.connect(
+            host = hname,
+            database = dbname,
+            user = uname,
+            passwd = pwd
+        )
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        print(err)
+        raise
+    return cnx
+
+
+def dbdisconnect(connection):
+    connection.disconnect
+
+
+def dbcommit(connection):
+    connection.commit()
+
+
+def execute_query(mydb, query, values=None, commit=True):
+    try:
+        mycursor = mydb.cursor()
+        mycursor.execute(query, values)
+        if (query.startswith('SELECT')):
+            return mycursor.fetchall()
+        elif (query.startswith('INSERT')):
+            if commit: mydb.commit()
+            return mycursor.lastrowid
+        elif (query.startswith('UPDATE') or query.startswith('DELETE')):
+            if commit: mydb.commit()
+            return mycursor.rowcount
+    except Exception as err:
+        raise
