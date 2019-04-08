@@ -1,4 +1,4 @@
-# Standard library imports
+# Standard library imports 
 import sys
 from datetime import date, timedelta
 
