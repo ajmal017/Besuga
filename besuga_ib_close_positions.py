@@ -20,7 +20,7 @@ import ib_config as ibconfig
 def opendefensiveposition(ib, cnt, pos):
     try:
         print("opendefensiveposition")
-        # creem objectes tupus contracte
+        # creem objectes tupus contracte 
         stkcnt = ibsync.Contract()  # el underlying de la opció
         optcnt1 = ibsync.Contract()  # la opció que hi ha al portfolio
         optcnt2 = ibsync.Contract()  # la potencial nova opció que es crearà
