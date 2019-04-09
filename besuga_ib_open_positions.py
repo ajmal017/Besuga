@@ -11,7 +11,7 @@ from besuga_ib_utilities import error_handling
 from besuga_ib_utilities import execute_query
 from besuga_ib_utilities import tradelimitorder
 import besuga_ib_utilities as ibutil
-import ib_insync as ibconfig
+import ib_config as ibconfig
 
 
 # scannerparms = [instrument, locationCode, scanCode, aboveVolume, marketCapAbove, averageOptionVolumeAbove]
