@@ -176,7 +176,7 @@ def dbcommit(connection):
 
 def dbrollback (connection):
     try:
-        connection.commit()
+        connection.rollback()
     except Exception as e:
         error_handling(e)
         raise
