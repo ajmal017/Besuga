@@ -7,12 +7,16 @@ import ib_insync as ibsync
 import tkinter as tk
 import mysql.connector as sqlconn
 import pandas as pd
+import numpy as np
 
 
 def error_handling (e, initial_text='Exception'):
-    print(e)
-    root = tk.Tk()
-    root.withdraw()
+    print("\n ", initial_text)
+    print("ntype: ", type(e))  # the exception instance
+    print("args: ", e.args)  # arguments stored in .args
+    print("Exception: ", e, "\n")  # __str__ allows args to be printed directly,
+    #root = tk.Tk()         # Inacabat: per treure pop-up windows
+    #root.withdraw()
 
 
 def save_to_excel(data_frame, out_path = 'C;/TEST.xlsx', sheet_name='Sheet 1'):

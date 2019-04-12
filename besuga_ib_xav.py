@@ -13,47 +13,51 @@ import ib_config as ibconfig
 
 
 if __name__ == '__main__':
-    myib = ibsync.IB()
-    mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
-    acc = ""
-    rslt = []
-    while acc != "exit":
-        acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
-        if acc == "besugapaper":
-            rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
-            break
-        elif acc == "xavpaper":
-            rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
-            break
-        elif acc == "mavpaper1":
-            rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
-            break
-        elif acc == "mavpaper2":
-            rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
-            break
-        elif acc == "exit":
-            sys.exit("Exit requested!")
-        else:
-            print("Unknown account!")
-    myib.connect(rslt[0][0], rslt[0][1], 1)
-    myib.reqMarketDataType(4)
-    myaccId = rslt[0][2]
-    myorderdict = {}
+    try:
+        myib = ibsync.IB()
+        mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
+        acc = ""
+        rslt = []
+        while acc != "exit":
+            acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
+            if acc == "besugapaper":
+                rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
+                break
+            elif acc == "xavpaper":
+                rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+                break
+            elif acc == "mavpaper1":
+                rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
+                break
+            elif acc == "mavpaper2":
+                rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
+                break
+            elif acc == "exit":
+                sys.exit("Exit requested!")
+            else:
+                print("Unknown account!")
+        myib.connect(rslt[0][0], rslt[0][1], 1)
+        myib.reqMarketDataType(4)
+        myaccId = rslt[0][2]
+        myorderdict = {}
 
-    ibmanagedb.manage_positions(myib, mydb, myaccId)
-    for i in range(len(ibconfig.myscancodelist)):
-        myscan = ibsync.ScannerSubscription(instrument='STK', locationCode='STK.US.MAJOR', scanCode=ibconfig.myscancodelist[i],
-                                        aboveVolume=200000, marketCapAbove=10000000000, averageOptionVolumeAbove=10000)
-        myorderdict[ibconfig.myscancodelist[i]] = ibopen.openpositions(myib, mydb, myaccId, myscan, ibconfig.mymaxstocks)
-    myib.sleep(100)
-    ibmanagedb.manage_positions(myib, mydb, myaccId)
-    ibclose.processopenpositions(myib, mydb,  myaccId)
-    ibmanagedb.manage_positions(myib, mydb, myaccId)
+        ibmanagedb.manage_positions(myib, mydb, myaccId)
+        for i in range(len(ibconfig.myscancodelist)):
+            myscan = ibsync.ScannerSubscription(instrument='STK', locationCode='STK.US.MAJOR', scanCode=ibconfig.myscancodelist[i],
+                                            aboveVolume=200000, marketCapAbove=10000000000, averageOptionVolumeAbove=10000)
+            myorderdict[ibconfig.myscancodelist[i]] = ibopen.openpositions(myib, mydb, myaccId, myscan, ibconfig.mymaxstocks)
+        myib.sleep(100)
+        ibmanagedb.manage_positions(myib, mydb, myaccId)
+        ibclose.processopenpositions(myib, mydb,  myaccId)
+        ibmanagedb.manage_positions(myib, mydb, myaccId)
 
-    ibutil.dbcommit(mydb)
-    ibutil.dbdisconnect(mydb)
-    myib.disconnect()
-
+        ibutil.dbcommit(mydb)
+        ibutil.dbdisconnect(mydb)
+        myib.disconnect()
+    except ConnectionRefusedError as cre:
+        ibutil.error_handling(cre, "I cannot connect to Interactive Brokers: ")
+    except Exception as e:
+        ibutil.error_handling(e)
 
 
 #def portfolio_to_dict(ib_):

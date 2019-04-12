@@ -1,5 +1,6 @@
 # Standard library imports 
 import sys
+import builtins
 from datetime import date, timedelta
 
 # Third party imports
@@ -122,8 +123,7 @@ def fillfundamentals(ib, stklst):
     print("\n\t fillfundamentals")
     try:
         for i in range(len(stklst)):
-            scancode = stklst[i][0]             #scan code
-            cnt = stklst[i][1]                  #contract
+            cnt = stklst[i][1]  # contract stklst[i][1]
             fr = ib.reqMktData(cnt, "258")
             ib.sleep(10)
             aux = dict(t.split('=') for t in str(fr.fundamentalRatios)[18:-1].split(',') if t)
@@ -131,32 +131,21 @@ def fillfundamentals(ib, stklst):
             addfunds = requestadditionalfundamentals(ib, cnt)
             # we fill the list with fundamental data that we will use to update database + make computations to select
             # candidates to open positions
-            # a vegades requestadditionalfundamentals toran buit, per això el "if df not
-            stklst2 = []
-            stklst2.append(cnt.conId)  # lst2[0]
-            stklst2.append(cnt.secType)  # lst2[1]
-            stklst2.append(cnt.symbol)  # lst2[2]
-            stklst2.append(cnt.localSymbol)  # lst2[3]
-            stklst2.append(cnt.currency)  # lst2[4]
-            stklst2.append(cnt.exchange)  # lst2[5]
-            stklst2.append(cnt.tradingClass)
-            stklst2.append(0)
-            stklst2.append(0)
-            stklst2.append(scancode)
-
+            # a vegades requestadditionalfundamentals torna buit, per això el "if df not"
+            stklst[i].append(0)         # stklst[i][2]
+            stklst[i].append(0)         # stklst[i][3]
             if fratios != None:
-                stklst2.append(fratios.get("AFEEPSNTM", ""))
-                stklst2.append(fratios.get("Frac52Wk", ""))             # fraction of 52 week high/low
-                stklst2.append(fratios.get("BETA", ""))
-                stklst2.append(fratios.get("APENORM", ""))              # annual normalized PE
-                stklst2.append(fratios.get("QTOTD2EQ", ""))             # total debt/total equity
-                stklst2.append(fratios.get("EV2EBITDA_Cur", ""))        # Enterprise value/ebitda - TTM
-                stklst2.append(fratios.get("TTMPRFCFPS", ""))           # price to free cash flow per share - TTM
-                stklst2.append(fratios.get("YIELD", ""))                # Dividend yield
-                stklst2.append(fratios.get("TTMROEPCT", ""))            # return on equity %
+                stklst[i].append(fratios.get("AFEEPSNTM", ""))              # stklst[i][4]
+                stklst[i].append(fratios.get("Frac52Wk", ""))               # fraction of 52 week high/low - stklst[i][5]
+                stklst[i].append(fratios.get("BETA", ""))                   # stklst[i][6]
+                stklst[i].append(fratios.get("APENORM", ""))                # annual normalized PE - stklst[i][7]
+                stklst[i].append(fratios.get("QTOTD2EQ", ""))               # total debt/total equity - stklst[i][8]
+                stklst[i].append(fratios.get("EV2EBITDA_Cur", ""))          # Enterprise value/ebitda - TTM  - stklst[i][9]
+                stklst[i].append(fratios.get("TTMPRFCFPS", ""))             # price to free cash flow per share - TTM  - stklst[i][10]
+                stklst[i].append(fratios.get("YIELD", ""))                  # Dividend yield - stklst[i][11]
+                stklst[i].append(fratios.get("TTMROEPCT", ""))              # return on equity % - stklst[i][12]
             else:
-                stklst2.extend([0, 0, 0, 0, 0, 0, 0, 0, 0])
-
+                stklst[i].extend([0, 0, 0, 0, 0, 0, 0, 0, 0])
                 '''
                 Not used attributes????
                 vcurrency = fratios.get("CURRENCY", "")
@@ -165,24 +154,51 @@ def fillfundamentals(ib, stklst):
                 vpeexclxor = fratios.get("PEEXCLXOR", "")  # annual PE excluding extraordinary items
                 vevcur = fratios.get("EV-Cur", "")  # Current enterprise value
                 '''
-
             if addfunds != None:
-                stklst2.append(addfunds["TargetPrice"])
-                stklst2.append(addfunds["ConsRecom"])
-                stklst2.append(addfunds["ProjEPS"])
-                stklst2.append(addfunds["ProjEPSQ"])
-                stklst2.append(addfunds["ProjPE"])
+                stklst[i].append(addfunds["TargetPrice"])                   # stklst[i][13]
+                stklst[i].append(addfunds["ConsRecom"])                     # stklst[i][14]
+                stklst[i].append(addfunds["ProjEPS"])                       # stklst[i][15]
+                stklst[i].append(addfunds["ProjEPSQ"])                      # stklst[i][16]
+                stklst[i].append(addfunds["ProjPE"])                        # stklst[i][17]
             else:
-                stklst2.extend([0, 0, 0, 0, 0])
-
-            for j in range(len(stklst2)):
-                if stklst2[j] == '': stklst2[j] = 0
-                if stklst2[j] == 'nan': stklst2[j] = 0
-                if stklst2[j] is None: stklst2[j] = 0
-
-            stklst[i] = stklst2
-            print("stklst2  ", stklst2)
+                stklst[i].extend([0, 0, 0, 0, 0])
+            for j in range(2, len(stklst[i])):
+                if stklst[i][j] == '': stklst[i][j] = 0
+                if stklst[i][j] == 'nan': stklst[i][j] = 0
+                if stklst[i][j] is None: stklst[i][j] = 0
+            print("fillfundamentals ", stklst[i])
         return (stklst)
+    except Exception as err:
+        error_handling(err)
+        raise
+
+
+def processpreselectedstocks(ib, db, accid, stklst):
+    print("\n\t processpreselectedstocks")
+    try:
+        listorders = []
+        for i in range(len(stklst)):
+            cnt = stklst[i][1]                  # contract
+            targetprice = stklst[i][13]         # target price
+            frac52w = stklst[i][5]              # distància a la que està del high/low
+            sql = "SELECT fTargetPrice FROM contractfundamentals WHERE fConId = '" + str(cnt.conId) + "' " \
+                  + " AND fAccId = '" + str(accid) + "' "
+            rst = execute_query(db, sql)
+            # si scancode = HIGH_VS_52W_HL i la distància al hign és <= que un 1% i TargetPrice > el que està guardat a la base de dades
+            if stklst[i][0] == 'HIGH_VS_52W_HL' and float(frac52w) >= ibconfig.my52whighfrac and targetprice > rst[0][0]:
+                print("Open new LOW_VS_52W_HL -  Put ", cnt.symbol)
+                listorders.append(opennewoption(ib, cnt, "SELL", "P", ibconfig.myoptdaystoexp))
+            elif stklst[i][0] == 'LOW_VS_52W_HL' and float(frac52w) <= ibconfig.my52wlowfrac and targetprice < rst[0][0]:
+                print("Open new LOW_VS_52W_HL -  Call ", cnt.symbol)
+                listorders.append(opennewoption(ib, cnt, "SELL", "C", ibconfig.myoptdaystoexp))
+            elif stklst[i][0] == 'HOT_BY_VOLUME':
+                print("ProcessPreselectedStocks HOT_BY_VOLUME ")
+            else:
+                print("I’m sorry Besuga, I’m afraid I can’t do that: \n    ", cnt.conId, ' ', cnt.symbol,
+                        "Scan Code: ", stklst[i][0], "frac52w: ", frac52w, " Target Price: ", targetprice, "\n")
+            # actualitzem els fundamentals a la base de dades
+            dbupdate_contractfundamentals(db, accid, stklst[i])
+        return listorders
     except Exception as err:
         error_handling(err)
         raise
@@ -210,52 +226,15 @@ def requestadditionalfundamentals(ib, cnt):
         error_handling(err)
         raise
 
-def processpreselectedstocks(ib, db, accid, stklst):
-    print("\n\t processpreselectedstocks")
-    try:
-        listorders = []
-        qty = -1
-        for i in range(len(stklst)):
-            cnt = ibsync.Contract()
-            cnt.conId = stklst[i][0]
-            ib.qualifyContracts(cnt)
-            sql = "SELECT * FROM contractfundamentals WHERE fConId = '" + str(cnt.conId) + "' " \
-                  + " AND fAccId = '" + accid + "' "
-            rst = execute_query(db, sql)
-            # si scancode = HIGH_VS_52W_HL i TargetPrice > el que està guardat a la base de dades
-            print("stklst[", i, "] ", stklst[i], " \n stklst[i][19] ", stklst[i][19], " \n rst[0][19] ", rst[0][19])
-            if stklst[i][9] == 'HIGH_VS_52W_HL' and stklst[i][19] > rst[0][19]:
-                print("Open new LOW_VS_52W_HL -  Put ", cnt.symbol)
-                listorders.append(opennewoption(ib, cnt, qty, "P", ibconfig.myoptdaystoexp))
-            elif stklst[i][9] == 'LOW_VS_52W_HL' and stklst[i][19] < rst[0][19]:
-                print("Open new LOW_VS_52W_HL -  Call ", cnt.symbol)
-                listorders.append(opennewoption(ib, cnt, qty, "C", ibconfig.myoptdaystoexp))
-            elif stklst[i][9] == 'HOT_BY_VOLUME':
-                print("ProcessPreselectedStocks HOT_BY_VOLUME ")
-            else:
-                print("I’m sorry Besuga, I’m afraid I can’t do that:             ", stklst[i][9]," ", cnt.symbol, "Target Price ", stklst[i][19])
-            # actualitzem els fundamentals a la base de dades
-            dbupdate_contractfundamentals(db, accid, stklst[i])
-        return listorders
-    except Exception as err:
-        error_handling(err)
-        raise
 
-
-def dbfill_contractfundamentalsNEW(db, accid, stklst):
+def dbupdate_contractfundamentals(db, accid, stk):
     try:
-        sql = "INSERT INTO contracts (kConId, kType, kSymbol, kLocalSymbol, kCurrency, kExchange, kTradingClass, kExpiry, kStrike, kRight, kMultiplier) "
-        sql = sql + "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s ,%s)"
-        for i in range(len(stklst)):
-            check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(contr[i][0]))
-            if (not check):
-                execute_query(db, sql, values=tuple(contr[i]), commit=True)
-        sql = "INSERT INTO contractfundamentals (fAccId, fConId, fType, fSymbol, fLocalSymbol, fCurrency, fExchange, fTradingClass, fRating, fTradeType, fScanCode,fEpsNext,fFrac52wk, fBeta, fPE0, fDebtEquity, fEVEbitda,fPricetoFCFShare, fYield,fROE, fTargetPrice, fConsRecom,fProjEPS, fProjEPSQ, fProjPE) "
-        sql = sql + "VALUES (str(accid), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s)"
-        for i in range(len(stklst)):
-            check = execute_query(db, "SELECT fConId FROM contractfundamentals WHERE fConId = " + str(stklst[i][0]) )
-            if (not check):
-                execute_query(db, sql, values = tuple(stklst[i]), commit = True)
+        cnt = stk[1]                # contract
+        sql = "UPDATE contractfundamentals set  fScanCode= %s, fRating = %s, fTradeType = %s, fEpsNext = %s, fFrac52wk = %s, fBeta = %s, fPE0 = %s, fDebtEquity = %s,  " \
+                " fEVEbitda = %s, fPricetoFCFShare = %s, fYield = %s, fROE = %s, fTargetPrice = %s, fConsRecom = %s, fProjEPS = %s, fProjEPSQ = %s, fProjPE = %s " \
+                " WHERE fConId = " + str(cnt.conId) + " AND fAccId = '" + str(accid) + "' "
+        val = [stk[0]] + stk[2::]
+        execute_query(db, sql, values = tuple(val), commit = True)
     except Exception as err:
         error_handling(err)
         raise
@@ -263,32 +242,30 @@ def dbfill_contractfundamentalsNEW(db, accid, stklst):
 
 def dbfill_contractfundamentals(db, accid, stklst):
     try:
-        print(accid)
-        sql = "INSERT INTO contractfundamentals (fAccId, fConId, fType, fSymbol, fLocalSymbol, fCurrency, fExchange, fTradingClass, fRating, fTradeType, fScanCode,fEpsNext,fFrac52wk, fBeta, fPE0, fDebtEquity, fEVEbitda,fPricetoFCFShare, fYield,fROE, fTargetPrice, fConsRecom,fProjEPS, fProjEPSQ, fProjPE) "
-        sql = sql + "VALUES ('"+ accid + "', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s)"
         for i in range(len(stklst)):
-            check = execute_query(db, "SELECT fConId FROM contractfundamentals WHERE fConId = " + str(stklst[i][0]) )
+            cnt = stklst[i][1]
+            check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(cnt.conId))
             if (not check):
-                execute_query(db, sql, values = tuple(stklst[i]), commit = True)
+                sql = "INSERT INTO contracts (kConId, kType, kSymbol, kLocalSymbol, kCurrency, kExchange, kTradingClass, kExpiry, kStrike, kRight, kMultiplier) " \
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s ,%s)"
+                val = (cnt.conId, cnt.secType, cnt.symbol, cnt.localSymbol, cnt.currency, cnt.exchange, cnt.tradingClass)
+                if (cnt.secType == 'OPT'):
+                    val = val + (cnt.lastTradeDateOrContractMonth, cnt.strike, cnt.right, cnt.multiplier)
+                else:
+                    val = val + (None, None, None, 1)       # posem el multiplier a 1a per la resta d'instruments
+                execute_query(db, sql, values = val, commit=True)
+            check = execute_query(db, "SELECT fConId FROM contractfundamentals WHERE fConId = " + str(cnt.conId))
+            if (not check):
+                sql = "INSERT INTO contractfundamentals (fAccId, fConId, fScanCode, fRating, fTradeType, fEpsNext, fFrac52wk, fBeta, fPE0, fDebtEquity, fEVEbitda, fPricetoFCFShare, fYield, fROE, fTargetPrice, fConsRecom, fProjEPS, fProjEPSQ, fProjPE) " \
+                        " VALUES ('" + str(accid) + "', '" + str(cnt.conId) + "', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                val = [stklst[i][0]] + stklst[i][2::]
+                execute_query(db, sql, values = tuple(val), commit = True)
     except Exception as err:
         error_handling(err)
         raise
 
 
-def dbupdate_contractfundamentals(db, accid, instrument):
-    try:
-        sql = "UPDATE contractfundamentals set fEpsNext = %s, fFrac52wk = %s, fBeta = %s, fPE0 = %s, fDebtEquity = %s, fEVEbitda = %s,fPricetoFCFShare = %s, " \
-                "fYield = %s, fROE = %s, fTargetPrice = %s, fConsRecom = %s,fProjEPS = %s, fProjEPSQ = %s, fProjPE = %s " \
-                " WHERE fConId = " + str(instrument[0]) + " AND fAccId = '" + accid + "' "
-        val = tuple(instrument[10:])
-        print ("sql ", sql, "\nvalues ", val)
-        execute_query(db, sql, values = val, commit = True)
-    except Exception as err:
-        error_handling(err)
-        raise
-
-
-def opennewoption(ib, cnt, qty, optright, optdaystoexp):
+def opennewoption(ib, cnt, opttype, optright, optdaystoexp):
     print("\n\t opennewoption")
     try:
         # agafem lastprice del underlying provinent de ticker
@@ -298,8 +275,8 @@ def opennewoption(ib, cnt, qty, optright, optdaystoexp):
         chain = next(c for c in chains if c.tradingClass == cnt.symbol and c.exchange == 'SMART')
 
         # separem strikes i expiracions (tenir en compte que strikes i expiracions estan en forma de Set, no de List
-        lstrikes = []
         lstrikes = chain.strikes
+
         # busquem el strike que més s'acosta a lastpricestk
         orderstrike = min(lstrikes, key=lambda x: abs(int(x) - lastpricestk))
 
@@ -330,6 +307,20 @@ def opennewoption(ib, cnt, qty, optright, optdaystoexp):
         # busquem el preu al que cotitza la nova opció de la que obrirem contracte
         topt = ib.reqTickers(optcnt)
         lastpriceopt = topt[0].marketPrice()
+
+        # fem un reqN¡MktData per obtenir (hopefully) els Greeks
+        opttkr = ib.reqMktData(optcnt, '', False, False)            # això torna un objecte Ticker
+        l = 0
+        while (opttkr.lastGreeks == None) and l < 5:  # mini-bucle per esperar que es rebin els Greeks
+            opttkr = ib.reqMktData(optcnt, '', False, False)
+            ib.sleep(5)
+            l += 1
+        # definim la quantitat = (Capital màxim)/(100*preu acció*Delta)
+        # en cas que la delta torni buida, usem 0.5 (de moment agafem opcions AtTheMoney igualment)
+        if (opttkr.lastGreeks.delta is not None):
+            qty = (1-2*-(opttype == "SELL"))*round(ibconfig.mymaxposition/(100*lastpricestk*abs(opttkr.lastGreeks.delta)))
+        else:
+            qty = (1-2*(opttype == "SELL"))*round(ibconfig.mymaxposition/(100*lastpricestk*0.5))
 
         print("symbol  ", optcnt.symbol, "lastpricestk  ", lastpricestk, "desiredstrike", lastpricestk,
               "orderstrike  ", orderstrike, "desiredexpiration", desiredexpiration, "orderexp  ", orderexp,
