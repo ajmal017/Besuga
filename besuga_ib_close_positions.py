@@ -41,7 +41,6 @@ def opendefensiveposition(ib, cnt, pos):
         dateexpiration = str(optcnt1.lastTradeDateOrContractMonth)[0:4] + str(optcnt1.lastTradeDateOrContractMonth)[
                                                                           4:6] + str(
             optcnt1.lastTradeDateOrContractMonth)[6:8]
-        print("dateexpiration   ", dateexpiration)
 
         # agafem lastprice del underlying provinent de ticker
         tstk = ib.reqTickers(stkcnt)
@@ -53,9 +52,6 @@ def opendefensiveposition(ib, cnt, pos):
         # busquem la cadena d'opcions del underlying
         chains = ib.reqSecDefOptParams(stkcnt.symbol, '', stkcnt.secType, stkcnt.conId)
         chain = next(c for c in chains if c.tradingClass == stkcnt.symbol and c.exchange == 'SMART')
-
-        # print(util.df(chains))
-        print(util.df(chains))
 
         # separem strikes i expiracions
         lexps = []
@@ -70,8 +66,6 @@ def opendefensiveposition(ib, cnt, pos):
 
         # busquem l'strike que més s'acosta al del preu actual del underlying
         orderstrike = min(lstrikes, key=lambda x: int(abs(int(x) - lastpricestk)))
-        print("symbol  ", optcnt1.symbol, "strikedistance", strikedistance, "lastpricestk  ", lastpricestk,
-              "orderstrike  ", orderstrike)
 
         # preparem el nou trade: si era un call ara un put...i al inreves
         if optcnt1.right == "C":
@@ -96,10 +90,9 @@ def opendefensiveposition(ib, cnt, pos):
         # lastprice = formatPrice(lastprice, 2)
 
         lastpriceopt2 = topt2[0].marketPrice()
-        print("lastpriceopt2  ", lastpriceopt2, "lastpriceopt2bis   ", lastpriceopt2bis)
         ib.sleep(1)
         # executem la ordre
-        print("tradelimitorder  ", optcnt2, pos.shares, lastpriceopt2, pos.conId)
+        print("opendefensiveposition - ", optcnt2, pos.shares, lastpriceopt2, pos.conId)
         tradelimitorder(ib, optcnt2, pos.shares, lastpriceopt2)
     except Exception as err:
         error_handling(err)
@@ -128,7 +121,7 @@ def allowTrade(pctpostimeelapsed, pctprofitnow, sectype):
 
 
 def processopenpositions(ib, db, vAccId):
-    print("processopenpositions")
+    print("\nprocessopenpositions")
     try:
 
         # llegim posicions obertes de la base de dades
@@ -225,7 +218,8 @@ def processopenpositions(ib, db, vAccId):
                     # price = (avgcost * (1 + (pctprofitnow / 100))) / 100
                     price = avgcost * (1 + pctprofitnow / 100)
                 fmtprice = formatPrice(price, 2)
-                tradelimitorder(ib, cnt, vshares, fmtprice)
+                print("Close Position: \t", cnt, "\t", ordertype, "\t", fmtprice)
+                tradelimitorder(ib, cnt, -vshares, fmtprice)
             elif allowtrade == 2:
                 # obrim posició defensiva
                 opendefensiveposition(ib, cnt, pos)
@@ -242,7 +236,8 @@ def processopenpositions(ib, db, vAccId):
                     price = lastprice
                     # price = avgcost * (1 + pctprofitnow / 100)
                 fmtprice = formatPrice(price, 2)
-                tradelimitorder(ib, cnt, vshares, fmtprice)
+                print("Close Position: \t", cnt, "\t", ordertype, "\t", fmtprice)
+                tradelimitorder(ib, cnt, -vshares, fmtprice)
             elif allowtrade == 4:
                 if pos.shares < 0:
                     ordertype = 'BUY'
@@ -256,7 +251,8 @@ def processopenpositions(ib, db, vAccId):
                     price = lastprice
                     # price = avgcost * (1 + pctprofitnow / 100)
                 fmtprice = formatPrice(price, 2)
-                tradelimitorder(ib, cnt, vshares, fmtprice)
+                print("Close Position: \t", cnt, "\t", ordertype, "\t", fmtprice)
+                tradelimitorder(ib, cnt, -vshares, fmtprice)
             elif allowtrade == "8888":
                 pass
             else:
@@ -269,17 +265,23 @@ def processopenpositions(ib, db, vAccId):
 if __name__ == "__main__":
 
     myib = ibsync.IB()
-    mydb = ibsync.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
-    #  creem instancia de connexió db al mateix temps que triem compte a IB amb el que operem
-    acc = input("triar entre 'besugapaper' o 'xavpaper' ")
+    mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
+    acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
     if acc == "besugapaper":
-        rslt = execute_query(mydb,"SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
+        rslt = execute_query(mydb,
+                             "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
     elif acc == "xavpaper":
-        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+        rslt = execute_query(mydb,
+                             "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+    elif acc == "mavpaper1":
+        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
+    elif acc == "mavpaper2":
+        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
     else:
         sys.exit("Unknown account!!")
     myib.connect(rslt[0][0], rslt[0][1], 1)
     myaccId = rslt[0][2]
+    myordersdict = {}
 
     # demanem delayed data
     myib.reqMarketDataType(4)
