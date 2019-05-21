@@ -1,6 +1,7 @@
 # Standard library imports 
 import sys
 import builtins
+from itertools import groupby
 from datetime import date, timedelta
 
 # Third party imports
@@ -10,14 +11,36 @@ import xmltodict
 # Local application imports
 from besuga_ib_utilities import error_handling
 from besuga_ib_utilities import execute_query
-from besuga_ib_utilities import tradelimitorder
+from besuga_ib_utilities import formatPrice
 import besuga_ib_utilities as ibutil
-import ib_config as ibconfig
+import besuga_ib_manage_db_positions as ibdb
+import ib_config as cf
 
 
+# Triem quin scan volem córrer. Si només en fem córrer 1, codi = descripció.
+# Per fer-ne anar + de 1, s'ha d'afegir a la BD-scancodes amb fromat scode: zzzz sdescriptions =[code1, AND, code 2, OR, code 3]
+# AND i OR són operadors lògics. Sempre va d'esquerra a dreta, no admet parèntesis
+def scanselection (db):
+    sql = "SELECT scode, ' - ', sdescription FROM scancodes ORDER BY scode"
+    rslt = ibutil.execute_query(db, sql)
+    text = str(rslt).strip('[]').replace("'", '').replace(",", '').replace('(', '').replace(')', '\n')
+    scancode = input("triar els scans desitjats - exit per sortir: \n " + text)
+    while scancode != "exit":
+        if scancode in (item[0] for item in rslt):
+            print("\nScan escollit: ", scancode, "\n")
+            break
+        else:
+            print("Scan desconegut!")
+            scancode = input("")
+    if scancode == "exit": sys.exit("Exit requested!")
+    scanselection = [scancode]+ [item[2] for item in rslt if item[0] == scancode]
+    return scanselection                    # [code, description]
+
+
+# Torna una llista d'stocks depenent de la llista d'scans i de l'operador lògic (AND, OR o ``)
 # scannerparms = [instrument, locationCode, scanCode, aboveVolume, marketCapAbove, averageOptionVolumeAbove]
 # maxstocke = màximum number of stocke returned by the scan
-def scanstocks(ib, scan, maxstocks):
+def getscannedstocks(ib, scandesc):
     '''
     # atttibutes of the scannerSubscription object, they can be used to filter for some conditions
 
@@ -102,28 +125,46 @@ def scanstocks(ib, scan, maxstocks):
 
     '''
     try:
-        print("\n\t scanstocks ")
-        stklst = []
+        print("\n\t getscannedstocks ")
+        scandesc = scandesc.split()                   #scandesc = scancode1 AND scancode2 OR,....
+        scan = ibsync.ScannerSubscription(instrument=cf.myscaninstrument, locationCode=cf.myscanlocation, scanCode = scandesc[0], aboveVolume=cf.myscanvolabove,
+                                          marketCapAbove=cf.myscanmktcapabove, averageOptionVolumeAbove=cf.myscanavgvoloptabove)
         scanner = ib.reqScannerData(scan, [])
-        for stock in scanner[:maxstocks]:  # loops through stocks in the scanner
+        # stklst[i] és una llista de Contracts
+        stklst = []
+        for stock in scanner[:cf.myscanmaxstocks]:              # loops through stocks in the scanner
             contr = stock.contractDetails.contract
             ib.qualifyContracts(contr)
-            stk = []
-            stk.append(scan.scanCode)           #scancode
-            stk.append(contr)                   #contract
-            print("scanstocks :: stock :: ", stk)
-            stklst.append(stk)
+            stklst.append(contr)                        # stklst llista de Contracts
+        for i in range(1, len(scandesc), 2):
+            scan = ibsync.ScannerSubscription(instrument=cf.myscaninstrument, locationCode=cf.myscanlocation,
+                    scanCode=scandesc[i+1], aboveVolume=cf.myscanvolabove, marketCapAbove=cf.myscanmktcapabove,
+                    averageOptionVolumeAbove=cf.myscanavgvoloptabove)
+            scanner = ib.reqScannerData(scan, [])
+            for stock in scanner[:cf.myscanmaxstocks]:           # loops through stocks in the scanner
+                contr = stock.contractDetails.contract
+                ib.qualifyContracts(contr)
+                stklst.append(contr)
+            if scandesc[i] == 'OR':
+                stklst = list(set(stklst))                 # treiem els duplicats
+            elif scandesc[i] == "AND":
+                stklst = [key for key, group in groupby(stklst) if len(list(group)) > 1]      # mantenim només els duplicats doncs són la intersecció
+                print("\n\t getscannedstocks ", stklst)
+            else:
+                raise Exception ("Hi ha alguna cosa que no funciona amb la descripció de l'scan code")
         return stklst
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
 def fillfundamentals(ib, stklst):
     print("\n\t fillfundamentals")
     try:
+        # convertim stklist en una llista de llistes stklst = [[cnt]] per poder-hi fer cabre els fundamentals
+        stklst = [[a] for a in stklst]
         for i in range(len(stklst)):
-            cnt = stklst[i][1]  # contract stklst[i][1]
+            cnt = stklst[i][0]
             fr = ib.reqMktData(cnt, "258")
             ib.sleep(10)
             aux = dict(t.split('=') for t in str(fr.fundamentalRatios)[18:-1].split(',') if t)
@@ -131,19 +172,16 @@ def fillfundamentals(ib, stklst):
             addfunds = requestadditionalfundamentals(ib, cnt)
             # we fill the list with fundamental data that we will use to update database + make computations to select
             # candidates to open positions
-            # a vegades requestadditionalfundamentals torna buit, per això el "if df not"
-            stklst[i].append(0)         # stklst[i][2]
-            stklst[i].append(0)         # stklst[i][3]
             if fratios != None:
-                stklst[i].append(fratios.get("AFEEPSNTM", ""))              # stklst[i][4]
-                stklst[i].append(fratios.get("Frac52Wk", ""))               # fraction of 52 week high/low - stklst[i][5]
-                stklst[i].append(fratios.get("BETA", ""))                   # stklst[i][6]
-                stklst[i].append(fratios.get("APENORM", ""))                # annual normalized PE - stklst[i][7]
-                stklst[i].append(fratios.get("QTOTD2EQ", ""))               # total debt/total equity - stklst[i][8]
-                stklst[i].append(fratios.get("EV2EBITDA_Cur", ""))          # Enterprise value/ebitda - TTM  - stklst[i][9]
-                stklst[i].append(fratios.get("TTMPRFCFPS", ""))             # price to free cash flow per share - TTM  - stklst[i][10]
-                stklst[i].append(fratios.get("YIELD", ""))                  # Dividend yield - stklst[i][11]
-                stklst[i].append(fratios.get("TTMROEPCT", ""))              # return on equity % - stklst[i][12]
+                stklst[i].append(fratios.get("AFEEPSNTM", ""))              # stklst[i][1]
+                stklst[i].append(fratios.get("Frac52Wk", ""))               # fraction of 52 week high/low - stklst[i][2]
+                stklst[i].append(fratios.get("BETA", ""))                   # stklst[i][3]
+                stklst[i].append(fratios.get("APENORM", ""))                # annual normalized PE - stklst[i][4]
+                stklst[i].append(fratios.get("QTOTD2EQ", ""))               # total debt/total equity - stklst[i][5]
+                stklst[i].append(fratios.get("EV2EBITDA_Cur", ""))          # Enterprise value/ebitda - TTM  - stklst[i][6]
+                stklst[i].append(fratios.get("TTMPRFCFPS", ""))             # price to free cash flow per share - TTM  - stklst[i][7]
+                stklst[i].append(fratios.get("YIELD", ""))                  # Dividend yield - stklst[i][8]
+                stklst[i].append(fratios.get("TTMROEPCT", ""))              # return on equity % - stklst[i][9]
             else:
                 stklst[i].extend([0, 0, 0, 0, 0, 0, 0, 0, 0])
                 '''
@@ -155,52 +193,57 @@ def fillfundamentals(ib, stklst):
                 vevcur = fratios.get("EV-Cur", "")  # Current enterprise value
                 '''
             if addfunds != None:
-                stklst[i].append(addfunds["TargetPrice"])                   # stklst[i][13]
-                stklst[i].append(addfunds["ConsRecom"])                     # stklst[i][14]
-                stklst[i].append(addfunds["ProjEPS"])                       # stklst[i][15]
-                stklst[i].append(addfunds["ProjEPSQ"])                      # stklst[i][16]
-                stklst[i].append(addfunds["ProjPE"])                        # stklst[i][17]
+                stklst[i].append(addfunds["TargetPrice"])                   # stklst[i][10]
+                stklst[i].append(addfunds["ConsRecom"])                     # stklst[i][11]
+                stklst[i].append(addfunds["ProjEPS"])                       # stklst[i][12]
+                stklst[i].append(addfunds["ProjEPSQ"])                      # stklst[i][13]
+                stklst[i].append(addfunds["ProjPE"])                        # stklst[i][14]
             else:
                 stklst[i].extend([0, 0, 0, 0, 0])
-            for j in range(2, len(stklst[i])):
+            for j in range(1, len(stklst[i])):
                 if stklst[i][j] == '': stklst[i][j] = 0
                 if stklst[i][j] == 'nan': stklst[i][j] = 0
                 if stklst[i][j] is None: stklst[i][j] = 0
             print("fillfundamentals ", stklst[i])
         return (stklst)
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
-def processpreselectedstocks(ib, db, accid, stklst):
+def processpreselectedstocks(ib, db, accid, stklst, scancode):
     print("\n\t processpreselectedstocks")
     try:
         listorders = []
         for i in range(len(stklst)):
-            cnt = stklst[i][1]                  # contract
-            targetprice = stklst[i][13]         # target price
-            frac52w = stklst[i][5]              # distància a la que està del high/low
-            sql = "SELECT fTargetPrice FROM contractfundamentals WHERE fConId = '" + str(cnt.conId) + "' " \
-                  + " AND fAccId = '" + str(accid) + "' "
+            cnt = stklst[i][0]                  # contract
+            targetprice = stklst[i][10]         # target price
+            frac52w = stklst[i][2]              # distància a la que està del high/low
+            # si no té historial (fdate = Now només) no faig res
+            # tampoc faig res si la Earnings Date és massa propera
+            sql =  "SELECT cf.fTargetPrice FROM contracts c "+\
+                " RIGHT JOIN contractfundamentals cf on c.kConId = cf.fConId "+\
+                " WHERE cf.fConId = '" + str(cnt.conId) + "' AND cf.fAccId = '" + str(accid) + "' AND cf.fDate < DATE(NOW()) "+\
+                " AND DATEDIFF(c.kEarningsDate, DATE(NOW())) >  " + str(cf.mydaystoearnings) +\
+                " ORDER BY cf.fDate DESC LIMIT 1 "
             rst = execute_query(db, sql)
-            # si scancode = HIGH_VS_52W_HL i la distància al hign és <= que un 1% i TargetPrice > el que està guardat a la base de dades
-            if stklst[i][0] == 'HIGH_VS_52W_HL' and float(frac52w) >= ibconfig.my52whighfrac and targetprice > rst[0][0]:
-                print("Open new LOW_VS_52W_HL -  Put ", cnt.symbol)
-                listorders.append(opennewoption(ib, cnt, "SELL", "P", ibconfig.myoptdaystoexp))
-            elif stklst[i][0] == 'LOW_VS_52W_HL' and float(frac52w) <= ibconfig.my52wlowfrac and targetprice < rst[0][0]:
-                print("Open new LOW_VS_52W_HL -  Call ", cnt.symbol)
-                listorders.append(opennewoption(ib, cnt, "SELL", "C", ibconfig.myoptdaystoexp))
-            elif stklst[i][0] == 'HOT_BY_VOLUME':
-                print("ProcessPreselectedStocks HOT_BY_VOLUME ")
-            else:
-                print("I’m sorry Besuga, I’m afraid I can’t do that: \n    ", cnt.conId, ' ', cnt.symbol,
+            if rst != []:
+                # si scancode = HIGH_VS_52W_HL i la distància al hign és <= que un 1%
+                # i TargetPrice > el que està guardat a la base de dades que no és d'avui
+                if stklst[i][0] == 'HIGH_VS_52W_HL' and float(frac52w) >= cf.my52whighfrac and targetprice > rst[1][0]:
+                    print("Open new LOW_VS_52W_HL -  Put ", cnt.symbol)
+                    listorders.append(opennewoption(ib, db, cnt, "SELL", "P", cf.myoptdaystoexp, scancode))
+                elif stklst[i][0] == 'LOW_VS_52W_HL' and float(frac52w) <= cf.my52wlowfrac and targetprice < rst[1][0]:
+                    print("Open new LOW_VS_52W_HL -  Call ", cnt.symbol)
+                    listorders.append(opennewoption(ib, db, cnt, "SELL", "C", cf.myoptdaystoexp, scancode))
+                else:
+                    print("No action required for Stock: \n    ", cnt.conId, ' ', cnt.symbol,
                         "Scan Code: ", stklst[i][0], "frac52w: ", frac52w, " Target Price: ", targetprice, "\n")
-            # actualitzem els fundamentals a la base de dades
-            dbupdate_contractfundamentals(db, accid, stklst[i])
+            else:
+                print ("No DB history for stock: ", cnt.conId, ' ', cnt.symbol, "\t- Scan Code: ", stklst[i][0])
         return listorders
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
@@ -223,49 +266,11 @@ def requestadditionalfundamentals(ib, cnt):
                 dictratios[dkey]=dvalue
             return(dictratios)
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
-def dbupdate_contractfundamentals(db, accid, stk):
-    try:
-        cnt = stk[1]                # contract
-        sql = "UPDATE contractfundamentals set  fScanCode= %s, fRating = %s, fTradeType = %s, fEpsNext = %s, fFrac52wk = %s, fBeta = %s, fPE0 = %s, fDebtEquity = %s,  " \
-                " fEVEbitda = %s, fPricetoFCFShare = %s, fYield = %s, fROE = %s, fTargetPrice = %s, fConsRecom = %s, fProjEPS = %s, fProjEPSQ = %s, fProjPE = %s " \
-                " WHERE fConId = " + str(cnt.conId) + " AND fAccId = '" + str(accid) + "' "
-        val = [stk[0]] + stk[2::]
-        execute_query(db, sql, values = tuple(val), commit = True)
-    except Exception as err:
-        error_handling(err)
-        raise
-
-
-def dbfill_contractfundamentals(db, accid, stklst):
-    try:
-        for i in range(len(stklst)):
-            cnt = stklst[i][1]
-            check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(cnt.conId))
-            if (not check):
-                sql = "INSERT INTO contracts (kConId, kType, kSymbol, kLocalSymbol, kCurrency, kExchange, kTradingClass, kExpiry, kStrike, kRight, kMultiplier) " \
-                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s ,%s)"
-                val = (cnt.conId, cnt.secType, cnt.symbol, cnt.localSymbol, cnt.currency, cnt.exchange, cnt.tradingClass)
-                if (cnt.secType == 'OPT'):
-                    val = val + (cnt.lastTradeDateOrContractMonth, cnt.strike, cnt.right, cnt.multiplier)
-                else:
-                    val = val + (None, None, None, 1)       # posem el multiplier a 1a per la resta d'instruments
-                execute_query(db, sql, values = val, commit=True)
-            check = execute_query(db, "SELECT fConId FROM contractfundamentals WHERE fConId = " + str(cnt.conId))
-            if (not check):
-                sql = "INSERT INTO contractfundamentals (fAccId, fConId, fScanCode, fRating, fTradeType, fEpsNext, fFrac52wk, fBeta, fPE0, fDebtEquity, fEVEbitda, fPricetoFCFShare, fYield, fROE, fTargetPrice, fConsRecom, fProjEPS, fProjEPSQ, fProjPE) " \
-                        " VALUES ('" + str(accid) + "', '" + str(cnt.conId) + "', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                val = [stklst[i][0]] + stklst[i][2::]
-                execute_query(db, sql, values = tuple(val), commit = True)
-    except Exception as err:
-        error_handling(err)
-        raise
-
-
-def opennewoption(ib, cnt, opttype, optright, optdaystoexp):
+def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
     print("\n\t opennewoption")
     try:
         # agafem lastprice del underlying provinent de ticker
@@ -292,7 +297,7 @@ def opennewoption(ib, cnt, opttype, optright, optdaystoexp):
         optcnt.symbol = cnt.symbol
         optcnt.strike = orderstrike
         optcnt.secType = "OPT"
-        optcnt.exchange = "SMART"
+        optcnt.exchange = cf.myprefexchange
         optcnt.currency = cnt.currency
         optcnt.right = optright
         optcnt.lastTradeDateOrContractMonth = orderexp
@@ -305,8 +310,7 @@ def opennewoption(ib, cnt, opttype, optright, optdaystoexp):
             optcnt.strike = orderstrike = int(orderstrike + 0.5*(optright == "C") - 0.5 * (optright == "P") )
             ct += 1
         # busquem el preu al que cotitza la nova opció de la que obrirem contracte
-        topt = ib.reqTickers(optcnt)
-        lastpriceopt = topt[0].marketPrice()
+        lastpriceopt = formatPrice(ib.reqTickers(optcnt)[0].marketPrice(), 2)
 
         # fem un reqN¡MktData per obtenir (hopefully) els Greeks
         opttkr = ib.reqMktData(optcnt, '', False, False)            # això torna un objecte Ticker
@@ -318,58 +322,84 @@ def opennewoption(ib, cnt, opttype, optright, optdaystoexp):
         # definim la quantitat = (Capital màxim)/(100*preu acció*Delta)
         # en cas que la delta torni buida, usem 0.5 (de moment agafem opcions AtTheMoney igualment)
         if (opttkr.lastGreeks.delta is not None):
-            qty = (1-2*-(opttype == "SELL"))*round(ibconfig.mymaxposition/(100*lastpricestk*abs(opttkr.lastGreeks.delta)))
+            qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*abs(opttkr.lastGreeks.delta)))
         else:
-            qty = (1-2*(opttype == "SELL"))*round(ibconfig.mymaxposition/(100*lastpricestk*0.5))
+            qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*0.5))
 
         print("symbol  ", optcnt.symbol, "lastpricestk  ", lastpricestk, "desiredstrike", lastpricestk,
               "orderstrike  ", orderstrike, "desiredexpiration", desiredexpiration, "orderexp  ", orderexp,
-              "quantity", qty, "conId", optcnt.conId, "price", lastpriceopt)
-
+              "quantity", qty, "conId", optcnt.conId, "lastpriceopt", lastpriceopt)
         if lastpriceopt == lastpriceopt:                            #checks if nan
-            return tradelimitorder(ib, optcnt, qty, lastpriceopt)
+            return tradelimitorder(ib, db, optcnt, qty, lastpriceopt, scode = scancode)
         else:
             return None
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
-def openpositions(ib, db, accid, scan, maxstocks):
+# passem limit order. Torna una list amb les ordres llençades
+# # scode = ScanCode i tType = TraeType són paràmetres opcionals per poder posar-los a la taula orders
+def tradelimitorder(ib, db, contract, quantity, price, scode= None, ttype = None):
     try:
-        scannedstocklist = scanstocks(ib, scan, maxstocks)
-        scannedstocklist = fillfundamentals(ib, scannedstocklist)
-        dbfill_contractfundamentals(db, accid, scannedstocklist)
-        return processpreselectedstocks(ib, db, accid, scannedstocklist)
+        ordertype  = "BUY" if quantity >= 0 else "SELL"
+        order = ibsync.LimitOrder(ordertype, abs(quantity), price, tif="GTC", transmit=False)
+        ib.qualifyContracts(contract)
+        trade = ib.placeOrder(contract, order)
+        ib.sleep(1)
+        assert trade in ib.trades()
+        assert order in ib.orders()
+        # Insertem el contracte a la taule Contract (si no hi és)
+        ibdb.dbfill_contracts(db, [contract])
+        sql = "INSERT INTO orders (oOrderId, oClientId, oConId, oQuantity, oStatus, oScanCode, oTradeType) "\
+            " VALUES (%s, %s, %s, %s, %s, %s, %s)"
+        val = (order.orderId, order.clientId, trade.contract.conId, order.totalQuantity, trade.orderStatus.status, scode, ttype)
+        execute_query(db, sql, val, True)
+        return trade
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
+        raise
+
+
+def openpositions(ib, db, accid):
+    try:
+        scansel = scanselection(db)
+        scancode, scandesc = scansel[0], scansel[1]
+        # getscannedstocks torna una llista de Contracts
+        scannedstocklist = getscannedstocks(ib, scandesc)
+        # fill fundamentals omple les llistes [contract(i), fundamentals(i)]
+        scannedstocklist = fillfundamentals(ib, scannedstocklist)
+        ibdb.dbfill_contractfundamentals(db, accid, scannedstocklist)
+        return processpreselectedstocks(ib, db, accid, scannedstocklist, scancode)
+    except Exception as err:
+        #error_handling(err)
         raise
 
 
 if __name__ == "__main__":
+    try:
+        myib = ibsync.IB()
+        mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
+        acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
+        if acc == "besugapaper":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
+        elif acc == "xavpaper":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+        elif acc == "mavpaper1":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
+        elif acc == "mavpaper2":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
+        else:
+            sys.exit("Unknown account!!")
+        myib.connect(rslt[0][0], rslt[0][1], 1)
+        myaccId = rslt[0][2]
+        myorderdict = {}
 
-    myib = ibsync.IB()
-    mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
-    acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
-    if acc == "besugapaper":
-        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
-    elif acc == "xavpaper":
-        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
-    elif acc == "mavpaper1":
-        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
-    elif acc == "mavpaper2":
-        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
-    else:
-        sys.exit("Unknown account!!")
-    myib.connect(rslt[0][0], rslt[0][1], 1)
-    myaccId = rslt[0][2]
-    myordersdict = {}
+        openpositions(myib, mydb, myaccId)
 
-    for i in range(len(ibconfig.myscancodelist)):
-        scan = ibsync.ScannerSubscription(instrument='STK', locationCode='STK.US.MAJOR', scanCode=ibconfig.myscancodelist[i],
-                                         aboveVolume=200000, marketCapAbove=10000000000, averageOptionVolumeAbove=10000)
-        myordersdict[ibconfig.myscancodelist[i]] = openpositions (myib, mydb, myaccId, scan,ibconfig.mymaxstocks)
 
-    ibutil.dbdisconnect(mydb)
-    myib.disconnect()
-
+        ibutil.dbdisconnect(mydb)
+        myib.disconnect()
+    except Exception as err:
+        error_handling(err)
+        raise

@@ -1,5 +1,6 @@
 # Standard library imports 
 import sys
+from datetime import datetime, timedelta
 
 # Third party imports
 import ib_insync as ibsync
@@ -10,10 +11,11 @@ from numpy import sign
 from besuga_ib_utilities import error_handling
 from besuga_ib_utilities import execute_query
 import besuga_ib_utilities as ibutil
-import ib_config as ibconfig
+import ib_config as cf
 
 
-def get_contracts(ib):
+# Torna una llista d'objectes Contract que formen part d'alguna Execution
+def get_currentcontracts(ib):
     try:
         execs = ib.reqExecutions()
         lst = []
@@ -21,25 +23,46 @@ def get_contracts(ib):
             contr = execs[i].contract
             ib.qualifyContracts(contr)
             print('Getting contract ' + str(contr.conId) + ' ' + str(contr.localSymbol))
-            lst2  = []
-            lst2.append(contr.conId)        #lst2[0]
-            lst2.append(contr.secType)      #lst2[1]
-            lst2.append(contr.symbol)       #lst2[2]
-            lst2.append(contr.localSymbol)  #lst2[3]
-            lst2.append(contr.currency)     #lst2[4]
-            lst2.append(contr.exchange)     #lst2[5]
-            lst2.append(contr.tradingClass)
-            if (contr.secType == 'OPT'):
-                lst2.append(contr.lastTradeDateOrContractMonth)     #lst2[6]
-                lst2.append(contr.strike)                           #lst2[7]
-                lst2.append(contr.right)                            #lst2[8]
-                lst2.append(contr.multiplier)                       #lst2[9]
-            else:
-                lst2.extend([None, None, None, 1])                  # posem el multiplier a 1a per la resta d'instruments
-            lst.append(lst2)
+            lst.append(contr)
         return(lst)
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
+        raise
+
+
+# torna la data d'obertura d'una posició oberta (només n'hi pot haver una d'oberta per account i contracte)
+# La torna en format YYYYmmdd (20120925)
+def get_positiondate(db, accid, conid):
+    try:
+        sql = "SELECT DATE_FORMAT(pdate, '%Y%m%d') FROM positions " \
+            "WHERE pAccId =  '" + str(accid) + "' AND pConId = " + str(conid) + " AND pActive = 1 "
+        execs = execute_query(db, sql)
+        if not execs:
+            #raise Exception (" No hi ha cap posició a la base de dades pel contracte ", conid )
+            print (" No hi ha cap posició a la base de dades pel contracte ", conid )
+        elif len(execs)>1:
+            raise Exception(" Hi ha més d'una posició oberta del contracte ", conid)
+        else:
+            return execs[0][0]
+    except Exception as err:
+        #error_handling(err)
+        raise
+
+# torna la 'earnings date' del contracte. La torna en format YYYYmmdd (20120925)
+def getearningsdate(db, conid):
+    try:
+        sql = "SELECT DATE_FORMAT(kEarningsDate, '%Y%m%d') FROM contracts " \
+              "WHERE kConId =  '" + str(conid) + "' "
+        execs = execute_query(db, sql)
+        if not execs:
+            print(" No hi ha Earnings Date a la base de dades pel contracte ", conid)
+        elif execs[0] != None:
+            # Si la data no està entrada, posem un valor suficientment allunyat per no sortir de la posició
+            return (datetime.now() + timedelta(days=cf.mydaystoearnings + 1)).strftime("%Y%m%d")
+        else:
+            return execs[0][0]
+    except Exception as err:
+        #error_handling(err)
         raise
 
 
@@ -53,16 +76,19 @@ def get_executions(ib):
             lst2 = []   # els valors a inserir a la DDBB aniran a lst2 (1 lst2 per cada execs[i])
             lst2.append(execs[i].execution.execId)  # lst2[0]
             lst2.append(execs[i].execution.acctNumber)  # lst2[1]
-            lst2.append(execs[i].contract.conId)  # lst2[2]
-            lst2.append(execs[i].time)             #lst2[3]
-            if (execs[i].execution.side == 'BOT'):  #lst2[4]
+            lst2.append(execs[i].execution.clientId)  # lst2[2]
+            lst2.append(execs[i].execution.orderId)  # lst2[3]
+            lst2.append(execs[i].contract.conId)  # lst2[4]
+
+            lst2.append(execs[i].time)             #lst2[5]
+            if (execs[i].execution.side == 'BOT'):  #lst2[6]
                 lst2.append(execs[i].execution.shares)
             else:
                 s = - execs[i].execution.shares
                 lst2.append(s)
-            lst2.append(execs[i].execution.price)   #lst2[5]
-            lst2.append(execs[i].commissionReport.commission)   #lst2[6]
-            if (execs[i].execution.liquidation is None):        #lst2[7]
+            lst2.append(execs[i].execution.price)   #lst2[7]
+            lst2.append(execs[i].commissionReport.commission)   #lst2[8]
+            if (execs[i].execution.liquidation is None):        #lst2[9]
                 lst2.append(0)
             else:
                 lst2.append(execs[i].execution.liquidation)
@@ -78,49 +104,26 @@ def get_executions(ib):
                     l += 1
                 opt = ib.reqMktData(execs[i].contract, '100,101,105,106,107', False, False)
                 if (opt.lastGreeks is not None):
-                    lst2.append(opt.lastGreeks.optPrice)           #lst2[8]
-                    lst2.append(opt.lastGreeks.impliedVol)         #lst2[9]
-                    lst2.append(opt.lastGreeks.delta)              #lst2[10]
-                    lst2.append(opt.lastGreeks.gamma)              #lst2[11]
-                    lst2.append(opt.lastGreeks.vega)               #lst2[12]
-                    lst2.append(opt.lastGreeks.theta)              #lst2[13]
-                    lst2.append(opt.lastGreeks.pvDividend)         #lst2[14]
-                    lst2.append(opt.lastGreeks.undPrice)           #lst2[15]
+                    lst2.append(opt.lastGreeks.optPrice)           #lst2[10]
+                    lst2.append(opt.lastGreeks.impliedVol)         #lst2[11]
+                    lst2.append(opt.lastGreeks.delta)              #lst2[12]
+                    lst2.append(opt.lastGreeks.gamma)              #lst2[13]
+                    lst2.append(opt.lastGreeks.vega)               #lst2[14]
+                    lst2.append(opt.lastGreeks.theta)              #lst2[15]
+                    lst2.append(opt.lastGreeks.pvDividend)         #lst2[16]
+                    lst2.append(opt.lastGreeks.undPrice)           #lst2[17]
                 else:
                     lst2.extend([0, 0, 0, 0, 0, 0, 0, 0])
             else:
                 # si no és una opció, ho deixem amb 0's
                 lst2.extend([0, 0, 0, 0, 0, 0, 0, 0])
-            lst2.append(1)                                      # lst2[16]
+            lst2.append(1)                                      # lst2[18]
             lst.append(lst2)                                    # lst2 (com a list) s'afegeix al final de la llista lst. Aquesta llista (lst) és la que retorna la funció
         return (lst)
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
-
-def get_openpositions(ib):
-    try:
-        pfl=ib.portfolio()
-        lst = []
-        for i in range(len(pfl)):
-            lst2  = []
-            lst2.append(pfl[i].account)                                                                         #lst2[0]
-            lst2.append(pfl[i].contract.conId)                                                                  #lst2[1]
-            lst2.append(pfl[i].position)                                                                        #lst2[2]
-            lst2.append(1)   # indicates Open position                                                          #lst2[3]
-            lst2.append(pfl[i].marketPrice)                                                                     #lst2[4]
-            lst2.append(pfl[i].marketValue)                                                                     #lst2[5]
-            mult = pfl[i].contract.multiplier                                                                   #lst2[6]
-            lst2.append(pfl[i].averageCost / float(mult)) if mult != '' else lst2.append(pfl[i].averageCost)
-            lst2.append(pfl[i].averageCost)                                                                     #lst2[7]
-            lst2.append(pfl[i].unrealizedPNL)                                                                   #lst2[8)
-            lst2.append(pfl[i].realizedPNL)                                                                     #lst2[9]
-            lst.append(lst2)
-        return (lst)
-    except Exception as err:
-        error_handling(err)
-        raise
 
 def dbanalyse_executions(db, accId):
     sql = "SELECT DISTINCT(tConId), min(tShares), max(tShares), COUNT(*) FROM activetrades WHERE tAccId = '" + str(accId) + "' " \
@@ -166,7 +169,7 @@ def dbanalyse_executions(db, accId):
                 final_list.append(execs[j])
         return final_list
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
@@ -220,31 +223,67 @@ def dbanalyse_positions(db, accId):
                 final_list.append(execs[h])
         return final_list
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
-#   inserts contracts when contract not in table mysql.contract
+#   inserts contracts when contract  not in table mysql.contract
 #   it can only be an 'INSERT' statement since a contract never changes
-def dbfill_contracts(db, contr):
+def dbfill_contracts(db, cntrlst):
     try:
-        sql = "INSERT INTO contracts (kConId, kType, kSymbol, kLocalSymbol, kCurrency, kExchange, kTradingClass, kExpiry, kStrike, kRight, kMultiplier) "
-        sql = sql + "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s ,%s)"
-        for i in range(len(contr)):
-            check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(contr[i][0]) )
+        sql = "INSERT INTO contracts (kConId, kType, kSymbol, kLocalSymbol, kCurrency, kExchange, kTradingClass, kExpiry, kStrike, kRight, kMultiplier, kEarningsDate) "
+        sql = sql + "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s ,%s, %s)"
+        for i in range(len(cntrlst)):
+            c = cntrlst[i]               # contract
+            check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(c.conId) )
             if (not check):
-                execute_query(db, sql, values = tuple(contr[i]), commit = True)
+                # Demanem la data d'Earnings
+                q = input("Entra la Earnings Date (yyyymmdd) per " + str(c.conId) + "-" + c.symbol + " - Return to exit ")
+                while q != "":
+                    if q.isdigit():
+                        if not (len(q) == 8 and int(q[:4]) > 2018 and int(q[4:6])<13 and int(q[6:8])<32):
+                            q = input("Wrong format!! - Correct format is yyyymmdd ")
+                        else: break
+                    else:
+                        q = input("Wrong format!! - Correct format is yyyymmdd ")
+                if q == "": q = None            # per evitar qie l'INSERT peti
+                val = [c.conId, c.secType, c.symbol, c.localSymbol, c.currency, c.exchange, c.tradingClass, None, None, None, 1, q]
+                # Si és una opció, reemplacem els darrers 4 valors
+                if (c.secType == 'OPT'):
+                    val[-4:] = [c.lastTradeDateOrContractMonth, c.strike, c.right, c.multiplier]
+                execute_query(db, sql, values = tuple(val), commit = True)
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
+        raise
+
+
+def dbfill_contractfundamentals(db, accid, stklst):
+    try:
+        clst = [a[0] for a in stklst]
+        dbfill_contracts(db, clst)
+        for i in range(len(stklst)):
+            c = stklst[i][0]
+            check = execute_query(db, "SELECT fConId FROM contractfundamentals WHERE fConId = " + str(c.conId) +
+                                  " AND fAccId = '" + str(accid) + "' AND fDate = DATE(NOW())")
+            if (not check):
+                datetoday = datetime.now().strftime("%Y%m%d")
+                sql = "INSERT INTO contractfundamentals (fAccId, fConId, fDate, fEpsNext, fFrac52wk, fBeta, fPE0, " \
+                      "fDebtEquity, fEVEbitda, fPricetoFCFShare, fYield, fROE, fTargetPrice, fConsRecom, fProjEPS, " \
+                      "fProjEPSQ, fProjPE) " \
+                      " VALUES ('" + str(accid) + "', '" + str(c.conId) + "', " + datetoday + ", %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                val = stklst[i][1::]
+                execute_query(db, sql, values = tuple(val), commit = True)
+    except Exception as err:
+        #error_handling(err)
         raise
 
 
 #   inserts 'last' trades (IB only keeps Fills/Executions during 1 to 7 days)
 #   IMPORTANT: queda pendent el tractament de les 'correccions' a IB: si n'hi ha una els darrers últims dígits de tExecId augmentaran en un (.01, .02...)
 def dbfill_executions(db, execs):
-    sql = "INSERT INTO trades (tExecid, tAccId, tConId, tTime, tShares, tPrice, tCommission, tLiquidation, "
+    sql = "INSERT INTO trades (tExecid, tAccId, tClientId, tOrderId, tConId, tTime, tShares, tPrice, tCommission, tLiquidation, "
     sql = sql + "toptPrice, toptIV, toptDelta, toptGamma, toptVega, toptTheta, toptPVDividend, toptPriceOfUnderlying, tActive)"
-    sql = sql + "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    sql = sql + "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     for i in range(len(execs)):
         try:
 
@@ -255,7 +294,7 @@ def dbfill_executions(db, execs):
             if err.errno == sqlconn.errorcode.ER_DUP_ENTRY:
                 continue
             else:
-                error_handling(err)
+                #error_handling(err)
                 raise
 
 
@@ -270,17 +309,17 @@ def dbupdate_executions(db, execs):
             elif execs[i][5] == 'M':
                 sql = "UPDATE trades SET tShares = tShares - " + str(execs[i][3]) + " ,tActive = 0 where tId = " + str(execs[i][0])
                 execute_query(db, sql, commit = True)
-                sql = "INSERT INTO trades (tExecid, tAccId, tConId, tTime, tShares, tPrice, tCommission, tLiquidation, "
+                sql = "INSERT INTO trades (tExecid, tAccId, tClientId, tOrderId, tConId, tTime, tShares, tPrice, tCommission, tLiquidation, "
                 sql = sql + "toptPrice, toptIV, toptDelta, toptGamma, toptVega, toptTheta, toptPVDividend, toptPriceOfUnderlying, tActive) "
                 # al nou registre, modifiquem l'Execid afegin-hi una C a davant, tActive=1 i tShares = execs[i][5]
                 new_execid = 'C' + execs[i][1]
-                sql = sql + "SELECT '" + new_execid + "',tAccId, tConId, tTime," + str(execs[i][3]) + ", tPrice, tCommission, tLiquidation, "
+                sql = sql + "SELECT '" + new_execid + "',tAccId, tClientId, tOrderId, tConId, tTime," + str(execs[i][3]) + ", tPrice, tCommission, tLiquidation, "
                 sql = sql + "toptPrice, toptIV, toptDelta, toptGamma, toptVega, toptTheta, "
                 sql = sql + "toptPVDividend, toptPriceOfUnderlying, 1 "  # active = 1
                 sql = sql + "FROM trades WHERE tId = " + str(execs[i][0])
-                execute_query(db, sql, commit = True)
+                dbfill_positions (execute_query(db, sql, commit = True))
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 # ATENCIÓ: S'HA DE MODIFICAR PERQUÈ EL DELETE TINGUI EN COMPTE l'ACCID
@@ -296,8 +335,8 @@ def dbfill_positions(db, execs):
         for i in range(len(execs)):
             if execs[i][19] != 'D':
                 print ('Inserting position ' + str(execs[i][0]))
-                sql = "INSERT INTO positions (pId, pExecid, pAccId, pConId, pDate, pType, pMultiplier, pShares, pInitialPrice, pInitialValue, pCommission, pLiquidation, pActive) " \
-                    + "SELECT ctId, ctExecId, ctAccId, ctConId, ctDate, ctType, ctMultiplier, ctShares, ctPrice, ctPrice*abs(ctShares)*ctMultiplier, ctCommission, ctLiquidation, ctActive " \
+                sql = "INSERT INTO positions (pId, pExecid, pAccId, pScanCode, pTradeType, pConId, pDate, pType, pMultiplier, pShares, pInitialPrice, pInitialValue, pCommission, pLiquidation, pActive) " \
+                    + "SELECT ctId, ctExecId, ctAccId, ctScanCode, ctTradeType, ctConId, ctDate, ctType, ctMultiplier, ctShares, ctPrice, ctPrice*abs(ctShares)*ctMultiplier, ctCommission, ctLiquidation, ctActive " \
                     + "FROM combinedtrades WHERE ctID = " + str(execs[i][0])
                 execute_query(db, sql, commit = True)
                 if execs[i][4] == 'OPT':
@@ -320,41 +359,64 @@ def dbfill_positions(db, execs):
                         val = (clist[11], clist[12], clist[13], clist[14], clist[15], clist[16], clist[17], clist[18])
                         execute_query(db, sql, values = val, commit = True)
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
+        raise
+
+
+def dbupdate_contractfundamentals(db, accid, stk):
+    try:
+        cnt = stk[1]                # contract
+        sql = "UPDATE contractfundamentals set  fEpsNext = %s, fFrac52wk = %s, fBeta = %s, fPE0 = %s, fDebtEquity = %s,  " \
+                " fEVEbitda = %s, fPricetoFCFShare = %s, fYield = %s, fROE = %s, fTargetPrice = %s, fConsRecom = %s, fProjEPS = %s, fProjEPSQ = %s, fProjPE = %s " \
+                " WHERE fConId = " + str(cnt.conId) + " AND fAccId = '" + str(accid) + "' "
+        val = stk[2::]
+        execute_query(db, sql, values = tuple(val), commit = True)
+    except Exception as err:
+        #error_handling(err)
         raise
 
 
 def manage_positions(ib, db, accId):
     try:
-        dbfill_contracts(db, get_contracts(ib))                     # inserta tots els diferents contractes, si no hi són a la DB
+        dbfill_contracts(db, get_currentcontracts(ib))                     # inserta tots els diferents contractes, si no hi són a la DB
         dbfill_executions(db, get_executions(ib))                   # inserta les noves (de 1 a 7 dies) executions
         dbupdate_executions(db, dbanalyse_executions(db,accId))   # actualitza les executions per tancar les que toqui
         dbfill_positions(db,dbanalyse_positions(db, accId))       # borra totes les positions i les re-inserta
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
 if __name__ == '__main__':
+    try:
+        myib = ibsync.IB()
+        mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
+        acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
+        if acc == "besugapaper":
+            rslt = execute_query(mydb,"SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
+        elif acc == "xavpaper":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+        elif acc == "mavpaper1":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
+        elif acc == "mavpaper2":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
+        else:
+            sys.exit("Unknown account!!")
+        myib.connect(rslt[0][0], rslt[0][1], 3)
+        myaccId = rslt[0][2]
 
-    myib = IB()
-    mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
-    acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
-    if acc == "besugapaper":
-        rslt = execute_query(mydb,"SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
-    elif acc == "xavpaper":
-        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
-    elif acc == "mavpaper1":
-        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
-    elif acc == "mavpaper2":
-        rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
-    else:
-        sys.exit("Unknown account!!")
-    myib.connect(rslt[0][0], rslt[0][1], 1)
-    myaccId = rslt[0][2]
+        #manage_positions(myib, mydb, myaccId)
+        #get_currentcontracts(myib)
+        #print(ibutil.get_openpositions(myib))
+        vow = ibsync.Stock(symbol = "REP", exchange = "SMART", currency = "EUR")
+        import besuga_ib_open_positions as ibopen
+        ibopen.tradelimitorder(myib, mydb, vow, 1, 2.7)
+        print(myib.reqAllOpenOrders())
 
-    manage_positions(myib, mydb, myaccId)
 
-    ibutil.dbcommit(mydb)
-    ibutil.dbdisconnect(mydb)
-    myib.disconnect()
+        ibutil.dbcommit(mydb)
+        ibutil.dbdisconnect(mydb)
+        myib.disconnect()
+    except Exception as err:
+        error_handling(err)
+        raise

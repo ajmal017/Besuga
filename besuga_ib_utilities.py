@@ -1,6 +1,7 @@
 # Standard library imports
 import sys
 import builtins
+import traceback
 
 # Third party imports
 import ib_insync as ibsync
@@ -14,9 +15,9 @@ def error_handling (e, initial_text='Exception'):
     print("\n ", initial_text)
     print("ntype: ", type(e))  # the exception instance
     print("args: ", e.args)  # arguments stored in .args
-    print("Exception: ", e, "\n")  # __str__ allows args to be printed directly,
-    #root = tk.Tk()         # Inacabat: per treure pop-up windows
-    #root.withdraw()
+    print("Exception: ", e)  # __str__ allows args to be printed directly
+    print("Traceback \n")
+    traceback.print_exc()
 
 
 def save_to_excel(data_frame, out_path = 'C;/TEST.xlsx', sheet_name='Sheet 1'):
@@ -31,7 +32,7 @@ def save_to_excel(data_frame, out_path = 'C;/TEST.xlsx', sheet_name='Sheet 1'):
         error_handling(e,'I/O Error: ')
         raise
     except Exception as e:
-        error_handling(e)
+        #error_handling(e)
         raise
 
 
@@ -51,7 +52,7 @@ def makeform(root, fields):
             field[1] = ent.get()
         return fields
     except Exception as e:
-        error_handling(e)
+        #error_handling(e)
         raise
 
     
@@ -70,7 +71,7 @@ def diffdaysfromtoday(date1):
         delta = tf2 - tf1
         return abs(delta.days)
     except Exception as e:
-        error_handling(e)
+        #error_handling(e)
         raise
 
 
@@ -94,24 +95,34 @@ def diffdays(date1,date2):
         # print(abs(delta.days))
         return abs(delta.days)
     except Exception as e:
-        error_handling(e)
+        #error_handling(e)
         raise
 
 
-# passem limit order. Torna una list amb les ordres llençades
-def tradelimitorder(ib, contract, quantity, price):
+def get_openpositions(ib):
     try:
-        print("tradelimitorder")
-        ultimaordre =[]
-        ordertype  = "BUY"
-        if quantity < 0: ordertype = "SELL"
-        order = ibsync.LimitOrder(ordertype, abs(quantity), price, tif="GTC", transmit=False)
-        ib.qualifyContracts(contract)
-        trade = ib.placeOrder(contract, order)
-        ib.sleep(1)
-        return trade
+        pfl=ib.portfolio()
+        print(pfl)
+        lst = []
+        for i in range(len(pfl)):
+            print(pfl[i])
+            print(pfl[i].contract.secType)
+            lst2  = []
+            lst2.append(pfl[i].account)                                                                         #lst2[0]
+            lst2.append(pfl[i].contract.conId)                                                                  #lst2[1]
+            lst2.append(pfl[i].position)                                                                        #lst2[2]
+            lst2.append(1)   # indicates Open position                                                          #lst2[3]
+            lst2.append(pfl[i].marketPrice)                                                                     #lst2[4]
+            lst2.append(pfl[i].marketValue)                                                                     #lst2[5]
+            mult = pfl[i].contract.multiplier                                                                   #lst2[6]
+            lst2.append(pfl[i].averageCost / float(mult)) if mult != '' else lst2.append(pfl[i].averageCost)
+            lst2.append(pfl[i].averageCost)                                                                     #lst2[7]
+            lst2.append(pfl[i].unrealizedPNL)                                                                   #lst2[8)
+            lst2.append(pfl[i].realizedPNL)                                                                     #lst2[9]
+            lst.append(lst2)
+        return (lst)
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
@@ -126,7 +137,7 @@ def accountAnalysis(ib):
             dfaccountSummary = pd.DataFrame(accountSummary)
             print(dfaccountSummary)
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
@@ -135,10 +146,9 @@ def formatPrice(price, prec):
     try:
         precision = prec
         newPrice = np.round(price, precision)
-        price = newPrice
-        return price
+        return newPrice
     except:
-        error_handling(err)
+        #error_handling(err)
         raise
 
 
@@ -158,8 +168,6 @@ def dbconnect(hname, dbname, uname, pwd):
         elif err.errno == sqlconn.errorcode.ER_BAD_DB_ERROR:
             initialtext = "Database does not exist"
             error_handling(err, initialtext)
-        else:
-            error_handling(e)
         raise
 
 
@@ -167,7 +175,7 @@ def dbdisconnect(connection):
     try:
         connection.close()
     except Exception as e:
-        error_handling(e)
+        #error_handling(e)
         raise
 
 
@@ -175,14 +183,14 @@ def dbcommit(connection):
     try:
         connection.commit()
     except Exception as e:
-        error_handling(e)
+        #error_handling(e)
         raise
 
 def dbrollback (connection):
     try:
         connection.rollback()
     except Exception as e:
-        error_handling(e)
+        #error_handling(e)
         raise
 
 
@@ -199,7 +207,7 @@ def execute_query(db, query, values=None, commit=True):
             if commit: db.commit()
             return cursor.rowcount
     except Exception as err:
-        error_handling(err)
+        #error_handling(err)
         if (db.is_connected()):
             db.rollback()
             cursor.close()

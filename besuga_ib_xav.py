@@ -9,47 +9,61 @@ import  besuga_ib_close_positions as ibclose
 import besuga_ib_open_positions as ibopen
 import  besuga_ib_manage_db_positions as ibmanagedb
 import besuga_ib_utilities as ibutil
-import ib_config as ibconfig
+import ib_config as cf
 
 
 if __name__ == '__main__':
     try:
         myib = ibsync.IB()
-        mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
-        acc = ""
+        mydb = ibutil.dbconnect(cf.dbhost, cf.dbname, cf.dbuser, cf.dbpassword)
         rslt = []
-        while acc != "exit":
-            acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
-            if acc == "besugapaper":
-                rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
+        q = input("Triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2' - exit to quit ")
+        while q != "exit":
+            sql = "SELECT connHost, connPort, connAccId, connClientId FROM connections WHERE "
+            if q.lower() == "besugapaper":
+                rslt = ibutil.execute_query(mydb, sql + " connName = 'besugapaper7498'")
                 break
-            elif acc == "xavpaper":
-                rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+            elif q.lower() == "xavpaper":
+                rslt = ibutil.execute_query(mydb, sql + " connName = 'xavpaper7497'")
                 break
-            elif acc == "mavpaper1":
-                rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
+            elif q.lower() == "mavpaper1":
+                rslt = ibutil.execute_query(mydb, sql + " connName = 'mavpaper1'")
                 break
-            elif acc == "mavpaper2":
-                rslt = ibutil.execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
+            elif q.lower() == "mavpaper2":
+                rslt = ibutil.execute_query(mydb, sql + " connName = 'mavpaper2'")
                 break
-            elif acc == "exit":
-                sys.exit("Exit requested!")
+            elif q.lower() == "exit":
+                sys.exit("Exit requested! ")
             else:
-                print("Unknown account!")
-        myib.connect(rslt[0][0], rslt[0][1], 1)
-        myib.reqMarketDataType(4)
-        myaccId = rslt[0][2]
-        myorderdict = {}
+                q = input ("Unknown account! ")
 
-        ibmanagedb.manage_positions(myib, mydb, myaccId)
-        for i in range(len(ibconfig.myscancodelist)):
-            myscan = ibsync.ScannerSubscription(instrument='STK', locationCode='STK.US.MAJOR', scanCode=ibconfig.myscancodelist[i],
-                                            aboveVolume=200000, marketCapAbove=10000000000, averageOptionVolumeAbove=10000)
-            myorderdict[ibconfig.myscancodelist[i]] = ibopen.openpositions(myib, mydb, myaccId, myscan, ibconfig.mymaxstocks)
-        myib.sleep(100)
-        ibmanagedb.manage_positions(myib, mydb, myaccId)
-        ibclose.processopenpositions(myib, mydb,  myaccId)
-        ibmanagedb.manage_positions(myib, mydb, myaccId)
+        myib.connect(rslt[0][0], rslt[0][1], rslt[0][3])
+        myaccId = rslt[0][2]
+        myib.reqMarketDataType(4)
+        myorderdict = {}
+        q = input("1 - Manage DB Positions \n 2 - Open Positions \n 3 - Close Positions \n 4 - All \n")
+        while q != "exit":
+            if q == "1":
+                ibmanagedb.manage_positions(myib, mydb, myaccId)
+                break
+            elif q == "2":
+                ibopen.openpositions(myib, mydb, myaccId)
+                break
+            elif q == "3":
+                ibclose.processopenpositions(myib, mydb)
+                break
+            elif q == "4":
+                ibmanagedb.manage_positions(myib, mydb, myaccId)
+                ibopen.openpositions(myib, mydb, myaccId)
+                myib.sleep(10)
+                ibmanagedb.manage_positions(myib, mydb, myaccId)
+                ibclose.processopenpositions(myib, mydb)
+                ibmanagedb.manage_positions(myib, mydb, myaccId)
+                break
+            elif q.lower() == "exit":
+                sys.exit("Exit requested! ")
+            else:
+                q = input("Unknown option! ")
 
         ibutil.dbcommit(mydb)
         ibutil.dbdisconnect(mydb)
