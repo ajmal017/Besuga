@@ -11,7 +11,7 @@ from numpy import sign
 from besuga_ib_utilities import error_handling
 from besuga_ib_utilities import execute_query
 import besuga_ib_utilities as ibutil
-import ib_config as cf
+import besuga_ib_config as cf
 
 
 # Torna una llista d'objectes Contract que formen part d'alguna Execution

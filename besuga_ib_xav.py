@@ -9,7 +9,7 @@ import  besuga_ib_close_positions as ibclose
 import besuga_ib_open_positions as ibopen
 import  besuga_ib_manage_db_positions as ibmanagedb
 import besuga_ib_utilities as ibutil
-import ib_config as cf
+import besuga_ib_config as cf
 
 
 if __name__ == '__main__':

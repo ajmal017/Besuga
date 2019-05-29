@@ -13,7 +13,7 @@ from besuga_ib_utilities import formatPrice
 from besuga_ib_open_positions import tradelimitorder
 import besuga_ib_manage_db_positions as ibdb
 import besuga_ib_utilities as ibutil
-import ib_config as cf
+import besuga_ib_config as cf
 
 
 def opendefensiveoption(ib, db, opt, pos, tradetype):

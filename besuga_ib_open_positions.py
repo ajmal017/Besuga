@@ -14,7 +14,7 @@ from besuga_ib_utilities import execute_query
 from besuga_ib_utilities import formatPrice
 import besuga_ib_utilities as ibutil
 import besuga_ib_manage_db_positions as ibdb
-import ib_config as cf
+import besuga_ib_config as cf
 
 
 # Triem quin scan volem córrer. Si només en fem córrer 1, codi = descripció.
