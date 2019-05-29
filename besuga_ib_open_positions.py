@@ -230,15 +230,15 @@ def processpreselectedstocks(ib, db, accid, stklst, scancode):
             if rst != []:
                 # si scancode = HIGH_VS_52W_HL i la distància al hign és <= que un 1%
                 # i TargetPrice > el que està guardat a la base de dades que no és d'avui
-                if stklst[i][0] == 'HIGH_VS_52W_HL' and float(frac52w) >= cf.my52whighfrac and targetprice > rst[1][0]:
+                if scancode == 'HIGH_VS_52W_HL' and float(frac52w) >= cf.my52whighfrac and targetprice > rst[0][0]:
                     print("Open new LOW_VS_52W_HL -  Put ", cnt.symbol)
                     listorders.append(opennewoption(ib, db, cnt, "SELL", "P", cf.myoptdaystoexp, scancode))
-                elif stklst[i][0] == 'LOW_VS_52W_HL' and float(frac52w) <= cf.my52wlowfrac and targetprice < rst[1][0]:
+                elif scancode == 'LOW_VS_52W_HL' and float(frac52w) <= cf.my52wlowfrac and targetprice < rst[0][0]:
                     print("Open new LOW_VS_52W_HL -  Call ", cnt.symbol)
                     listorders.append(opennewoption(ib, db, cnt, "SELL", "C", cf.myoptdaystoexp, scancode))
                 else:
-                    print("No action required for Stock: \n    ", cnt.conId, ' ', cnt.symbol,
-                        "Scan Code: ", stklst[i][0], "frac52w: ", frac52w, " Target Price: ", targetprice, "\n")
+                    print("No action required for Stock:   ", cnt.conId, ' ', cnt.symbol,
+                        "Scan Code: ", stklst[i][0], "frac52w: ", frac52w, " Target Price: ", targetprice)
             else:
                 print ("No DB history for stock: ", cnt.conId, ' ', cnt.symbol, "\t- Scan Code: ", stklst[i][0])
         return listorders

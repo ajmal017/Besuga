@@ -250,7 +250,7 @@ def dbfill_contracts(db, cntrlst):
                 val = [c.conId, c.secType, c.symbol, c.localSymbol, c.currency, c.exchange, c.tradingClass, None, None, None, 1, q]
                 # Si és una opció, reemplacem els darrers 4 valors
                 if (c.secType == 'OPT'):
-                    val[-4:] = [c.lastTradeDateOrContractMonth, c.strike, c.right, c.multiplier]
+                    val[-5:-1] = [c.lastTradeDateOrContractMonth, c.strike, c.right, c.multiplier]
                 execute_query(db, sql, values = tuple(val), commit = True)
     except Exception as err:
         #error_handling(err)
