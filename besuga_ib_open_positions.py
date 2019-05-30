@@ -221,11 +221,11 @@ def processpreselectedstocks(ib, db, accid, stklst, scancode):
             frac52w = stklst[i][2]              # distància a la que està del high/low
             # si no té historial (fdate = Now només) no faig res
             # tampoc faig res si la Earnings Date és massa propera
-            sql =  "SELECT cf.fTargetPrice FROM contracts c "+\
-                " RIGHT JOIN contractfundamentals cf on c.kConId = cf.fConId "+\
-                " WHERE cf.fConId = '" + str(cnt.conId) + "' AND cf.fAccId = '" + str(accid) + "' AND cf.fDate < DATE(NOW()) "+\
+            sql =  "SELECT cfs.fTargetPrice FROM contracts c "+\
+                " RIGHT JOIN contractfundamentals cfs on c.kConId = cfs.fConId "+\
+                " WHERE cfs.fConId = '" + str(cnt.conId) + "' AND cfs.fAccId = '" + str(accid) + "' AND cfs.fDate < DATE(NOW()) "+\
                 " AND DATEDIFF(c.kEarningsDate, DATE(NOW())) >  " + str(cf.mydaystoearnings) +\
-                " ORDER BY cf.fDate DESC LIMIT 1 "
+                " ORDER BY cfs.fDate DESC LIMIT 1 "
             rst = execute_query(db, sql)
             if rst != []:
                 # si scancode = HIGH_VS_52W_HL i la distància al hign és <= que un 1%
@@ -321,8 +321,11 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
             l += 1
         # definim la quantitat = (Capital màxim)/(100*preu acció*Delta)
         # en cas que la delta torni buida, usem 0.5 (de moment agafem opcions AtTheMoney igualment)
-        if (opttkr.lastGreeks.delta is not None):
-            qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*abs(opttkr.lastGreeks.delta)))
+        if (opttkr.lastGreeks is not None):
+            if (opttkr.lastGreeks.delta is not None):
+                qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*abs(opttkr.lastGreeks.delta)))
+            else:
+                qty = (1 - 2 * (opttype == "SELL")) * round(cf.mymaxposition / (100 * lastpricestk * 0.5))
         else:
             qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*0.5))
 
