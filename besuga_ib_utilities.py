@@ -2,6 +2,7 @@
 import sys
 import builtins
 import traceback
+from datetime import datetime
 
 # Third party imports
 import ib_insync as ibsync
@@ -79,8 +80,7 @@ def diffdaysfromtoday(date1):
 def diffdays(date1,date2):
     try:
         #entrem les dates en format 20181026, l'ordre de les datas és indiferent
-        #caluulem la distància en dies entre les dues dates en termes absoluts
-        from datetime import datetime
+        #calulem la distància en dies entre les dues dates en termes absoluts
         if date1 <= date2:
             t1 = date1
             t2 = date2
@@ -92,7 +92,6 @@ def diffdays(date1,date2):
         tf1 = datetime.strptime(tf1, "%Y,%m,%d")
         tf2 = datetime.strptime(tf2, "%Y,%m,%d")
         delta = tf2 - tf1
-        # print(abs(delta.days))
         return abs(delta.days)
     except Exception as e:
         #error_handling(e)

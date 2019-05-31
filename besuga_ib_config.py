@@ -14,7 +14,7 @@ dbpassword = 'Besuga8888'
 # Scan params
 #myscancodelist = ['HIGH_VS_52W_HL', 'LOW_VS_52W_HL']
 #myscancodelist = ['LOW_VS_52W_HL']
-myscanmaxstocks = 50           # limits the number of stocks returned by the scan
+myscanmaxstocks = 5          # limits the number of stocks returned by the scan
 myscaninstrument = 'STK'
 myscanlocation = 'STK.US.MAJOR'
 myscanvolabove= 200000

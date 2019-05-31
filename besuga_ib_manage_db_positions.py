@@ -49,7 +49,7 @@ def get_positiondate(db, accid, conid):
         raise
 
 
-def inputearningsdate (db, conid, symbol):
+def inputearningsdate (conid , symbol ):
     # Demanem la data d'Earnings
     q = input("Entra la Earnings Date (yyyymmdd) per " + str(conid) + "-" + str(symbol) + " - Return to exit ")
     while q != "":
@@ -65,16 +65,21 @@ def inputearningsdate (db, conid, symbol):
 
 
 # torna la 'earnings date' del contracte. La torna en format YYYYmmdd (20120925)
-def getearningsdate(db, conid):
+def getearningsdate(db, conid, symbol):
     try:
         sql = "SELECT DATE_FORMAT(kEarningsDate, '%Y%m%d') FROM contracts " \
               "WHERE kConId =  '" + str(conid) + "' "
         execs = execute_query(db, sql)
         if not execs:
-            print(" No hi ha Earnings Date a la base de dades pel contracte ", conid)
-        elif execs[0] != None:
+            print(" El contracte  ", conid, " no existeix a la base de dades ")
+        elif execs[0][0] == None:
+            print(" La Earnings Date no existeix pel contracte ", str(conid), "-" , str(symbol))
+            earningsdate = inputearningsdate(conid, symbol)
             # ULL!!!!!! Si la data no està entrada, posem un valor suficientment allunyat per no sortir de la posició
-            return (datetime.now() + timedelta(days=cf.mydaystoearnings + 1)).strftime("%Y%m%d")
+            if earningsdate != None:
+                return earningsdate
+            else:
+                return (datetime.now() + timedelta(days=cf.mydaystoearnings + 1)).strftime("%Y%m%d")
         else:
             return execs[0][0]
     except Exception as err:
@@ -85,21 +90,19 @@ def getearningsdate(db, conid):
 def dbfill_earningsdate(db):
     try:
         # opció d'entrar-ne una o totes les buides
-        q = input("Vols entrar totes les que estan buides o una d'específica? \n Totes - Totes \n 'StockCode' altrament \n\n")
-        while q != "":
-            if q.upper() == 'TOTES':
-                sql = "SELECT  kConId, kSymbol FROM besuga.contracts WHERE kEarningsDate IS NULL ORDER BY kSymbol "
-                break
-            else:
-                sql = "SELECT  kConId, kSymbol FROM besuga.contracts WHERE kSymbol = '" + q + "' "
-                break
+        q = input("Vols entrar totes les que estan buides o una d'específica? \n 'Press Enter' - Totes \n 'StockCode' - una de concreta \n\n")
+        sql = "SELECT  kConId, kSymbol FROM besuga.contracts "
+        if q != "":
+            sql = sql + " WHERE kSymbol = '" + q + "' "
+        else:
+            sql = sql + " WHERE kEarningsDate IS NULL ORDER BY kSymbol "
         execs = execute_query(db, sql)
-        print("Aquesta és la llista: \n\n", execs)
         if not execs:
             print(" No hi ha cap contracte que compleixi el criteri ")
         else:
+            print("Aquesta és la llista:    ", execs)
             for i in range(len(execs)):
-                earningsdate = inputearningsdate(db, execs[i][0], execs[i][1])
+                earningsdate = inputearningsdate(execs[i][0], execs[i][1])
                 sql = "UPDATE besuga.contracts SET kEarningsDate = " + str(earningsdate) + \
                       " WHERE kConId= '" + str(execs[i][0]) + "' "
                 execute_query(db, sql)
@@ -279,7 +282,7 @@ def dbfill_contracts(db, cntrlst):
             c = cntrlst[i]               # contract
             check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(c.conId))
             if (not check):
-                earningsdate = inputearningsdate(db, c.conId, c.symbol)     # earnings date
+                earningsdate = inputearningsdate(c.conId, c.symbol)     # earnings date
                 val = [c.conId, c.secType, c.symbol, c.localSymbol, c.currency, c.exchange, c.tradingClass, None, None, None, 1, earningsdate]
                 # Si és una opció, reemplacem els valors específics d'opcions
                 if (c.secType == 'OPT'):

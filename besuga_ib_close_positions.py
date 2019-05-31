@@ -83,7 +83,7 @@ def processopenpositions(ib, db):
         # llegim posicions obertes de IB: llista d'objectes (namedtuples) PortfolioItem (atributs: contract, position, marketPrice, marketValue, averageCost, unrealizedPNL, realizedPNL, account)
         for pos in ib.portfolio():
             pctprofitnow = 100*pos.unrealizedPNL/(pos.averageCost*abs(pos.position))             # percentatge de guanys/pèrdues
-            dateearnings = ibdb.getearningsdate(db, pos.contract.conId)
+            dateearnings = ibdb.getearningsdate(db, pos.contract.conId, pos.contract.symbol)
             print(pos.contract.localSymbol, "\t pctprofitnow: ", round(pctprofitnow, 2), "\t Earnings Date: ", dateearnings)
             pcttimeelapsed = 0                                                                   # inicialitzem
             # calculem el percentatge de temps transcorregut des de l'obertura respecte el temps fins a expiració
