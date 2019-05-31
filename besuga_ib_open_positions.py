@@ -227,7 +227,7 @@ def processpreselectedstocks(ib, db, accid, stklst, scancode):
                 " AND DATEDIFF(c.kEarningsDate, DATE(NOW())) >  " + str(cf.mydaystoearnings) +\
                 " ORDER BY cfs.fDate DESC LIMIT 1 "
             rst = execute_query(db, sql)
-            if rst != []:
+            if rst != [] and targetprice > 0:
                 # si scancode = HIGH_VS_52W_HL i la distància al hign és <= que un 1%
                 # i TargetPrice > el que està guardat a la base de dades que no és d'avui
                 if scancode == 'HIGH_VS_52W_HL' and float(frac52w) >= cf.my52whighfrac and targetprice > rst[0][0]:
@@ -238,7 +238,10 @@ def processpreselectedstocks(ib, db, accid, stklst, scancode):
                     listorders.append(opennewoption(ib, db, cnt, "SELL", "C", cf.myoptdaystoexp, scancode))
                 else:
                     print("No action required for Stock:   ", cnt.conId, ' ', cnt.symbol,
-                        "Scan Code: ", stklst[i][0], "frac52w: ", frac52w, " Target Price: ", targetprice)
+                        "Scan Code: ", stklst[i][0], "frac52w: ", frac52w, " New Target Price: ", targetprice,
+                          "Old Target Price: ", rst[0][0])
+            elif targetprice <= 0:
+                print("No target price for Stock ", cnt.conId, ' ', cnt.symbol)
             else:
                 print ("No DB history for stock: ", cnt.conId, ' ', cnt.symbol, "\t- Scan Code: ", stklst[i][0])
         return listorders
@@ -321,14 +324,11 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
             l += 1
         # definim la quantitat = (Capital màxim)/(100*preu acció*Delta)
         # en cas que la delta torni buida, usem 0.5 (de moment agafem opcions AtTheMoney igualment)
+        delta = 0.5
         if (opttkr.lastGreeks is not None):
             if (opttkr.lastGreeks.delta is not None):
-                qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*abs(opttkr.lastGreeks.delta)))
-            else:
-                qty = (1 - 2 * (opttype == "SELL")) * round(cf.mymaxposition / (100 * lastpricestk * 0.5))
-        else:
-            qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*0.5))
-
+                delta = opttkr.lastGreeks.delta
+        qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*abs(opttkr.lastGreeks.delta)))
         print("symbol  ", optcnt.symbol, "lastpricestk  ", lastpricestk, "desiredstrike", lastpricestk,
               "orderstrike  ", orderstrike, "desiredexpiration", desiredexpiration, "orderexp  ", orderexp,
               "quantity", qty, "conId", optcnt.conId, "lastpriceopt", lastpriceopt)

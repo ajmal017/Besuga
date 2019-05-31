@@ -84,8 +84,6 @@ def processopenpositions(ib, db):
         for pos in ib.portfolio():
             pctprofitnow = 100*pos.unrealizedPNL/(pos.averageCost*abs(pos.position))             # percentatge de guanys/pèrdues
             dateearnings = ibdb.getearningsdate(db, pos.contract.conId)
-            # TEMPORAL DEGUT A INCONSISTENCIES A LA BBDD
-            #if dateearnings == None: dateearnings = datetime.now().strftime("%Y%m%d")
             print(pos.contract.localSymbol, "\t pctprofitnow: ", round(pctprofitnow, 2), "\t Earnings Date: ", dateearnings)
             pcttimeelapsed = 0                                                                   # inicialitzem
             # calculem el percentatge de temps transcorregut des de l'obertura respecte el temps fins a expiració

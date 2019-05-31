@@ -48,6 +48,22 @@ def get_positiondate(db, accid, conid):
         #error_handling(err)
         raise
 
+
+def inputearningsdate (db, conid, symbol):
+    # Demanem la data d'Earnings
+    q = input("Entra la Earnings Date (yyyymmdd) per " + str(conid) + "-" + str(symbol) + " - Return to exit ")
+    while q != "":
+        if q.isdigit():
+            if not (len(q) == 8 and int(q[:4]) > 2018 and int(q[4:6]) < 13 and int(q[6:8]) < 32):
+                q = input("Wrong format!! - Correct format is yyyymmdd ")
+            else:
+                break
+        else:
+            q = input("Wrong format!! - Correct format is yyyymmdd ")
+    if q == "": q = None  # per evitar qie l'INSERT peti
+    return q
+
+
 # torna la 'earnings date' del contracte. La torna en format YYYYmmdd (20120925)
 def getearningsdate(db, conid):
     try:
@@ -57,12 +73,38 @@ def getearningsdate(db, conid):
         if not execs:
             print(" No hi ha Earnings Date a la base de dades pel contracte ", conid)
         elif execs[0] != None:
-            # Si la data no està entrada, posem un valor suficientment allunyat per no sortir de la posició
+            # ULL!!!!!! Si la data no està entrada, posem un valor suficientment allunyat per no sortir de la posició
             return (datetime.now() + timedelta(days=cf.mydaystoearnings + 1)).strftime("%Y%m%d")
         else:
             return execs[0][0]
     except Exception as err:
         #error_handling(err)
+        raise
+
+
+def dbfill_earningsdate(db):
+    try:
+        # opció d'entrar-ne una o totes les buides
+        q = input("Vols entrar totes les que estan buides o una d'específica? \n Totes - Totes \n 'StockCode' altrament \n\n")
+        while q != "":
+            if q.upper() == 'TOTES':
+                sql = "SELECT  kConId, kSymbol FROM besuga.contracts WHERE kEarningsDate IS NULL ORDER BY kSymbol "
+                break
+            else:
+                sql = "SELECT  kConId, kSymbol FROM besuga.contracts WHERE kSymbol = '" + q + "' "
+                break
+        execs = execute_query(db, sql)
+        print("Aquesta és la llista: \n\n", execs)
+        if not execs:
+            print(" No hi ha cap contracte que compleixi el criteri ")
+        else:
+            for i in range(len(execs)):
+                earningsdate = inputearningsdate(db, execs[i][0], execs[i][1])
+                sql = "UPDATE besuga.contracts SET kEarningsDate = " + str(earningsdate) + \
+                      " WHERE kConId= '" + str(execs[i][0]) + "' "
+                execute_query(db, sql)
+    except Exception as err:
+        # error_handling(err)
         raise
 
 
@@ -235,20 +277,11 @@ def dbfill_contracts(db, cntrlst):
         sql = sql + "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s ,%s, %s)"
         for i in range(len(cntrlst)):
             c = cntrlst[i]               # contract
-            check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(c.conId) )
+            check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(c.conId))
             if (not check):
-                # Demanem la data d'Earnings
-                q = input("Entra la Earnings Date (yyyymmdd) per " + str(c.conId) + "-" + c.symbol + " - Return to exit ")
-                while q != "":
-                    if q.isdigit():
-                        if not (len(q) == 8 and int(q[:4]) > 2018 and int(q[4:6])<13 and int(q[6:8])<32):
-                            q = input("Wrong format!! - Correct format is yyyymmdd ")
-                        else: break
-                    else:
-                        q = input("Wrong format!! - Correct format is yyyymmdd ")
-                if q == "": q = None            # per evitar qie l'INSERT peti
-                val = [c.conId, c.secType, c.symbol, c.localSymbol, c.currency, c.exchange, c.tradingClass, None, None, None, 1, q]
-                # Si és una opció, reemplacem els darrers 4 valors
+                earningsdate = inputearningsdate(db, c.conId, c.symbol)     # earnings date
+                val = [c.conId, c.secType, c.symbol, c.localSymbol, c.currency, c.exchange, c.tradingClass, None, None, None, 1, earningsdate]
+                # Si és una opció, reemplacem els valors específics d'opcions
                 if (c.secType == 'OPT'):
                     val[-5:-1] = [c.lastTradeDateOrContractMonth, c.strike, c.right, c.multiplier]
                 execute_query(db, sql, values = tuple(val), commit = True)
