@@ -310,8 +310,10 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
         # fins a trobar un que sigui acceptat. Això pot provocar que ens allunyem del ATM, però no hi ha altra solució
         ct = 0
         while ib.qualifyContracts(optcnt) == [] and ct < 11:
-            optcnt.strike = orderstrike = int(orderstrike + 0.5*(optright == "C") - 0.5 * (optright == "P") )
+            orderstrike = orderstrike + 0.5*(optright == "C") - 0.5 * (optright == "P")
+            optcnt.strike = int(orderstrike)
             ct += 1
+
         # busquem el preu al que cotitza la nova opció de la que obrirem contracte
         lastpriceopt = formatPrice(ib.reqTickers(optcnt)[0].marketPrice(), 2)
 
