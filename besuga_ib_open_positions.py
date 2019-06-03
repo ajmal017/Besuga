@@ -328,7 +328,7 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
         if (opttkr.lastGreeks is not None):
             if (opttkr.lastGreeks.delta is not None):
                 delta = opttkr.lastGreeks.delta
-        qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*abs(opttkr.lastGreeks.delta)))
+        qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*abs(delta)))
         print("symbol  ", optcnt.symbol, "lastpricestk  ", lastpricestk, "desiredstrike", lastpricestk,
               "orderstrike  ", orderstrike, "desiredexpiration", desiredexpiration, "orderexp  ", orderexp,
               "quantity", qty, "conId", optcnt.conId, "lastpriceopt", lastpriceopt)
