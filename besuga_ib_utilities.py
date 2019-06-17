@@ -124,6 +124,24 @@ def get_openpositions(ib):
         #error_handling(err)
         raise
 
+# Torna una llista amb un objectePNL [PnL(account='...', dailyPnL=nnnn, unrealizedPnL=-nnn, realizedPnL=nnn)]
+def get_pnl(ib, accid):
+    ib.reqPnL(accid, '')
+    ib.sleep(8)
+    pnl = ib.pnl()
+    ib.cancelPnL(accid, '')
+    return pnl
+
+
+# Torna el PNLSingle per un contracte específic
+# [PnLSingle(account='....', conId=nnn, dailyPnL=nnn, unrealizedPnL=nnn, realizedPnL=nnn, position=-n, value=nnn)]
+def get_pnlsingle(ib, accid, conid):
+    ib.reqPnLSingle(accid, '', conid)
+    ib.sleep(8)
+    pnl = ib.pnlSingle()
+    ib.cancelPnLSingle(accid, '', conid)
+    return pnl
+
 
 def accountAnalysis(ib):
     try:

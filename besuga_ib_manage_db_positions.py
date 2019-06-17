@@ -60,7 +60,7 @@ def inputearningsdate (conid , symbol ):
                 break
         else:
             q = input("Wrong format!! - Correct format is yyyymmdd ")
-    if q == "": q = None  # per evitar qie l'INSERT peti
+    if q == "": q = cf.mydefaultearndate        # Si apretem Enter, posem la per defect (20880808)
     return q
 
 
@@ -411,6 +411,57 @@ def dbupdate_contractfundamentals(db, accid, stk):
         #error_handling(err)
         raise
 
+# Calcula el PNL  de les posicions obertes per tipus (calls, puts o stocks)
+def dbget_pnlbyright(ib):
+    try:
+        pnl = [0,0,0,0,0,0] #pnl = [num calls, PNL calls, num puts, PNL puts, num stocks, PNL stocks]
+        for pos in ib.portfolio():
+            i = 6       # 6 perquè peti si alguna cosa falla (sortirà de rang)
+            if(pos.contract.secType == "STK"): i = 4
+            elif (pos.contract.secType == "OPT"):
+                if (pos.contract.right == "C"): i=0
+                elif (pos.contract.right == "P"): i=2
+            pnl[i] += 1
+            pnl[i+1] += (pos.unrealizedPNL)
+        return pnl
+    except Exception as err:
+        # error_handling(err)
+        raise
+
+
+def dbfill_accounthistory(ib, db, accid):
+    print("Filling Account History ")
+    try:
+        dacs = ib.accountSummary()
+        check = execute_query(db, "SELECT * FROM accounthistory WHERE achId = '" + str(accid) + "' AND achDate = DATE(NOW()) ")
+        val= [accid]
+        for i in range(1, 22): val.append(dacs[i].value)
+        # pnl és una llista [PnL, num open Calls, open calls PNL, open Puts, open Puts PNL, ope Stocks, open Stocks PNL]
+        realizedPNL = execute_query(db, "SELECT sum(pPNL) FROM positions WHERE pActive = 0")
+        pnl = ibutil.get_pnl(ib, accid)
+        val.extend([pnl[0].dailyPnL, pnl[0].unrealizedPnL + float(realizedPNL[0][0]), pnl[0].unrealizedPnL, float(realizedPNL[0][0])])
+        val.extend(dbget_pnlbyright(ib))
+        val = tuple(val)
+
+        if(not  check):
+            sql = "INSERT INTO accounthistory (achId, achDate, achTime, achCushion, achDayTradesRemaining,achLookAheadNextChange,achAccruedCash,achAvailableFunds,achBuyingPower, " \
+                  "achEquityWithLoanValue,achExcessLiquidity,achFullAvailableFunds,achFullExcessLiquidity,achFullInitMarginReq,achFullMaintMarginReq,achGrossPositionValue,achInitMarginReq, " \
+                  "achLookAheadAvailableFunds,achLookAheadExcessLiquidity,achLookAheadInitMarginReq,achLookAheadMaintMarginReq,achMaintMarginReq,achNetLiquidation,achTotalCashValue, " \
+                  "achDailyPNL, achTotalPNL, achUnrealizedPNL, achRealizedPNL, achOpenCalls, achOpenCallsPNL, achOpenPuts, achOpenPutsPNL, achOpenStocks, achOpenStocksPNL) " \
+                  "VALUES (%s, DATE(NOW()), CURTIME(), %s,%s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s ) "
+            execute_query(db, sql, values=val, commit=True)
+        else:
+            sql = "UPDATE accounthistory SET achTime = CURTIME(), achCushion = %s, achDayTradesRemaining = %s,achLookAheadNextChange = %s, achAccruedCash = %s,achAvailableFunds = %s,achBuyingPower = %s, " \
+                  "achEquityWithLoanValue = %s,achExcessLiquidity = %s,achFullAvailableFunds = %s,achFullExcessLiquidity = %s,achFullInitMarginReq = %s,achFullMaintMarginReq = %s,achGrossPositionValue = %s,achInitMarginReq = %s, " \
+                  "achLookAheadAvailableFunds = %s,achLookAheadExcessLiquidity = %s,achLookAheadInitMarginReq = %s,achLookAheadMaintMarginReq = %s,achMaintMarginReq = %s,achNetLiquidation = %s, achTotalCashValue = %s, " \
+                  "achDailyPNL = %s, achTotalPNL = %s, achUnrealizedPNL = %s, achRealizedPNL = %s, achOpenCalls = %s, achOpenCallsPNL = %s, achOpenPuts = %s, achOpenPutsPNL = %s, achOpenStocks = %s, achOpenStocksPNL = %s " \
+                  " WHERE achId = '" + str(accid) + "' AND achDate = DATE(NOW()) "
+            val = val[1::]
+            execute_query(db, sql, values = val, commit=True)
+    except Exception as err:
+        #error_handling(err)
+        raise
+
 
 def manage_positions(ib, db, accId):
     try:
@@ -444,11 +495,12 @@ if __name__ == '__main__':
         #manage_positions(myib, mydb, myaccId)
         #get_currentcontracts(myib)
         #print(ibutil.get_openpositions(myib))
-        vow = ibsync.Stock(symbol = "REP", exchange = "SMART", currency = "EUR")
-        import besuga_ib_open_positions as ibopen
-        ibopen.tradelimitorder(myib, mydb, vow, 1, 2.7)
-        print(myib.reqAllOpenOrders())
+        #vow = ibsync.Stock(symbol = "REP", exchange = "SMART", currency = "EUR")
+        #import besuga_ib_open_positions as ibopen
+        #ibopen.tradelimitorder(myib, mydb, vow, 1, 2.7)
+        #print(myib.reqAllOpenOrders())
 
+        dbfill_accounthistory(myib, mydb, myaccId)
 
         ibutil.dbcommit(mydb)
         ibutil.dbdisconnect(mydb)

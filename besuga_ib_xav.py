@@ -41,7 +41,8 @@ if __name__ == '__main__':
         myaccId = rslt[0][2]
         myib.reqMarketDataType(4)
         myorderdict = {}
-        q = input(" 1 - Manage DB Positions \n 2 - Open Positions \n 3 - Close Positions \n 4 - Fill Earnings Date \n All - All \n")
+        q = input(" 1 - Manage DB Positions \n 2 - Open Positions \n 3 - Close Positions \n 4 - Fill Earnings Date \n"
+                  " 5 - Fill account history \n All - Manage-Open-Close \n")
         while q != "exit":
             if q == "1":
                 ibmanagedb.manage_positions(myib, mydb, myaccId)
@@ -55,12 +56,14 @@ if __name__ == '__main__':
             elif q == "4":
                 ibmanagedb.dbfill_earningsdate(mydb)
                 break
+            elif q == "5":
+                ibmanagedb.dbfill_accounthistory(myib, mydb, myaccId)
+                break
             elif q.upper() == "ALL":
                 ibmanagedb.manage_positions(myib, mydb, myaccId)
                 ibopen.openpositions(myib, mydb, myaccId)
                 myib.sleep(10)
                 ibclose.processopenpositions(myib, mydb)
-                ibmanagedb.manage_positions(myib, mydb, myaccId)
                 break
             elif q.lower() == "exit":
                 sys.exit("Exit requested! ")

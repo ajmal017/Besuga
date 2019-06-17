@@ -12,9 +12,7 @@ dbuser = 'xarnaus'
 dbpassword = 'Besuga8888'
 
 # Scan params
-#myscancodelist = ['HIGH_VS_52W_HL', 'LOW_VS_52W_HL']
-#myscancodelist = ['LOW_VS_52W_HL']
-myscanmaxstocks = 5          # limits the number of stocks returned by the scan
+myscanmaxstocks = 50          # limits the number of stocks returned by the scan
 myscaninstrument = 'STK'
 myscanlocation = 'STK.US.MAJOR'
 myscanvolabove= 200000
@@ -22,10 +20,15 @@ myscanmktcapabove = 10000000000
 myscanavgvoloptabove = 10000
 
 # open/close parameters
-mydaystoearnings = 1        # Closse all positions at most mydaystoearnings to the Earnings Date
+myaction = 'SELL'               # Determina si comprem (BUY), venem (SELL) o una de cada (BOTH)
+mydaystoearnings = 1            # Close all positions at most mydaystoearnings to the Earnings Date
+mydefaultearndate = 20880808    # Earning Date per defecte (quan no n'entrem cap)
 
 # Options
-myoptdaystoexp = 45         # desired option days to expiration
+myoptbuyitm = 0.1           # Distància de l'strike (percentual entre -1 i 1, 0 = strike, positius =ITM) per accions comprades
+myoptsellitm = 0            # Distància de l'strike (percentual entre -1 i 1, 0 = strike, positius =ITM) per accions  venudes
+myoptselldte = 45           # desired option days to expiration when selling options
+myoptbuydte = 180           # desired option days to expiration when buying options
 myoptprofit = 80            # tanquem posicions al mypctprofit% de guany
 myoptprofit10 = 30          # tanquem posicions al mypctprofit10% de guany si el temps transcorregut <= 10%
 myoptprofit20 = 40          # tanquem posicions al mypctprofit40% de guany si el temps transcorregut <= 40%

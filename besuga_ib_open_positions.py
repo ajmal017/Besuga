@@ -216,9 +216,10 @@ def processpreselectedstocks(ib, db, accid, stklst, scancode):
     try:
         listorders = []
         for i in range(len(stklst)):
-            cnt = stklst[i][0]                  # contract
-            targetprice = stklst[i][10]         # target price
-            frac52w = stklst[i][2]              # distància a la que està del high/low
+            cnt = stklst[i][0]                                                  # contract
+            targetprice = stklst[i][10]                                         # target price
+            frac52w = stklst[i][2]                                              # distància a la que està del high/low
+            bolb, bols = (cf.myaction == 'BUY'), (cf.myaction == 'SELL')       # booleans per decidir què fem
             # si no té historial (fdate = Now només) no faig res
             # tampoc faig res si la Earnings Date és massa propera
             sql =  "SELECT cfs.fTargetPrice FROM contracts c "+\
@@ -231,11 +232,21 @@ def processpreselectedstocks(ib, db, accid, stklst, scancode):
                 # si scancode = HIGH_VS_52W_HL i la distància al hign és <= que un 1%
                 # i TargetPrice > el que està guardat a la base de dades que no és d'avui
                 if scancode == 'HIGH_VS_52W_HL' and float(frac52w) >= cf.my52whighfrac and targetprice > rst[0][0]:
-                    print("Open new LOW_VS_52W_HL -  Put ", cnt.symbol)
-                    listorders.append(opennewoption(ib, db, cnt, "SELL", "P", cf.myoptdaystoexp, scancode))
+                    print("Open new HIGH_VS_52W_HL -  Put ", cnt.symbol)
+                    if cf.myaction == "BOTH":
+                        listorders.append(opennewoption(ib, db, cnt, "SELL", "P", cf.myoptselldte,scancode))
+                        listorders.append(opennewoption(ib, db, cnt, "BUY", "C", cf.myoptbuydte, scancode))
+                    elif cf.myaction in ['BUY', 'SELL']:
+                        listorders.append(opennewoption(ib, db, cnt, cf.myaction, (bols and "P") or (bolb and "C"),
+                                                        bolb*cf.myoptbuydte + bols*cf.myoptselldte, scancode))
                 elif scancode == 'LOW_VS_52W_HL' and float(frac52w) <= cf.my52wlowfrac and targetprice < rst[0][0]:
                     print("Open new LOW_VS_52W_HL -  Call ", cnt.symbol)
-                    listorders.append(opennewoption(ib, db, cnt, "SELL", "C", cf.myoptdaystoexp, scancode))
+                    if cf.myaction == "BOTH":
+                        listorders.append(opennewoption(ib, db, cnt, "SELL", "C", cf.myoptselldte,scancode))
+                        listorders.append(opennewoption(ib, db, cnt, "BUY", "P", cf.myoptbuydte, scancode))
+                    elif cf.myaction in ['BUY', 'SELL']:
+                        listorders.append(opennewoption(ib, db, cnt, cf.myaction, (bols and "C") or (bolb and "P"),
+                                                        bolb * cf.myoptbuydte + bols * cf.myoptselldte, scancode))
                 else:
                     print("No action required for Stock:   ", cnt.conId, ' ', cnt.symbol,
                         "Scan Code: ", stklst[i][0], "frac52w: ", frac52w, " New Target Price: ", targetprice,
@@ -285,8 +296,10 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
         # separem strikes i expiracions (tenir en compte que strikes i expiracions estan en forma de Set, no de List
         lstrikes = chain.strikes
 
-        # busquem el strike que més s'acosta a lastpricestk
-        orderstrike = min(lstrikes, key=lambda x: abs(int(x) - lastpricestk))
+        # busquem el strike que més s'acosta al que volem (factoritzem pel percentatge que es vol ITM)
+        itm = (opttype == 'BUY') * cf.myoptbuyitm + (opttype == 'SELL') * cf.myoptsellitm
+        wantedprice = lastpricestk * (1 + itm * ((optright == "P") - (optright == "C") ))
+        orderstrike = min(lstrikes, key=lambda x: abs(int(x) - wantedprice))
 
         # busquem la expiration que més s'acosta a desiredexpiration
         lexps = []

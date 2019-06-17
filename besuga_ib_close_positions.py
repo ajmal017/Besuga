@@ -60,15 +60,16 @@ def allowTrade(dateearnings, pcttimeelapsed, pctprofitnow, sectype, shortpositio
             allowtrade = 'EARNDATE'
         elif sectype == "OPT":
             if pctprofitnow >= cf.myoptprofit: allowtrade = 'OPTW'
-            elif pcttimeelapsed <= 10 and pctprofitnow > cf.myoptprofit10: allowtrade = 'OPTW-10'
-            elif pcttimeelapsed <= 20 and pctprofitnow > cf.myoptprofit20: allowtrade = 'OPTW-20'
-            elif pcttimeelapsed <= 50 and pctprofitnow > cf.myoptprofit50: allowtrade = 'OPTW-50'
-            elif pcttimeelapsed <= 75 and pctprofitnow > cf.myoptprofit75: allowtrade = 'OPTW-75'
-            if pctprofitnow <= cf.myoptloss: allowtrade = 'OPTL'
+            elif pcttimeelapsed <= 10 and pctprofitnow > cf.myoptprofit10: allowtrade = 'OPTW-10-' + str(round(pctprofitnow))
+            elif pcttimeelapsed <= 20 and pctprofitnow > cf.myoptprofit20: allowtrade = 'OPTW-20-' + str(round(pctprofitnow))
+            elif pcttimeelapsed <= 50 and pctprofitnow > cf.myoptprofit50: allowtrade = 'OPTW-50-' + str(round(pctprofitnow))
+            elif pcttimeelapsed <= 75 and pctprofitnow > cf.myoptprofit75: allowtrade = 'OPTW-75-' + str(round(pctprofitnow))
+            if pctprofitnow <= cf.myoptloss: allowtrade = 'OPTL-' + str(round(pctprofitnow))
+            # de moment suprimim la opció de trade defensiu
             #elif pctprofitnow <= cf.myoptlossdef and shortposition: allowtrade = 'OPTL -D'
         elif sectype == "STK":
-            if pctprofitnow >= cf.mystkprofit: allowtrade = 'STK1'
-            elif pctprofitnow <= cf.mystkloss: allowtrade = 'STK2'
+            if pctprofitnow >= cf.mystkprofit: allowtrade = 'STK1-' + str(round(pctprofitnow))
+            elif pctprofitnow <= cf.mystkloss: allowtrade = 'STK2-' + str(round(pctprofitnow))
         else:
             print("I don't know how to handle thie security type: ", sectype)
         return allowtrade
@@ -103,7 +104,7 @@ def processopenpositions(ib, db):
                 if allowtrade == 'OPTL -D' and pos.position < 0:
                     opendefensiveoption(ib, db, pos.contract, pos.position, allowtrade)
                 else:
-                    tradelimitorder(ib, db, pos.contract, -pos.position, fmtprice, ttype = allowtrade + str(cf.myoptloss))              #-posició per tancar el què tenim
+                    tradelimitorder(ib, db, pos.contract, -pos.position, fmtprice, ttype = allowtrade )              #-posició per tancar el què tenim
                     print("Close Position ", pos, "\n\t due to: ", allowtrade, "\t price: ", fmtprice)
         print ("\n Closing Positions analysis finalised \n")
     except Exception as err:
