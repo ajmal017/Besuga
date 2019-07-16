@@ -11,14 +11,13 @@ from besuga_ib_utilities import execute_query
 from besuga_ib_utilities import diffdays
 from besuga_ib_utilities import formatPrice
 from besuga_ib_open_positions import tradelimitorder
-import besuga_ib_manage_db_positions as ibdb
+import besuga_ib_manage_db as ibdb
 import besuga_ib_utilities as ibutil
 import besuga_ib_config as cf
 
 
 def opendefensiveoption(ib, db, opt, pos, tradetype):
     try:
-        print("opendefensiveoption")
         # underlying de la opció
         stkcnt = ibsync.contract.Stock(symbol = opt.symbol, exchange = cf.myprefexchange, currency = opt.currency)
         ib.qualifyContracts(stkcnt)
@@ -52,12 +51,12 @@ def opendefensiveoption(ib, db, opt, pos, tradetype):
         raise
 
 # Mirem en quines condicions hem de tancar o obrir opcions defensives
+# !!!!!!!!!!!! Només pensat per opcions vengudes, de fet. Repensar quan s'implementin opcions comprades
 def allowTrade(dateearnings, pcttimeelapsed, pctprofitnow, sectype, shortposition):
     try:
         allowtrade = None
         # si la data de Earnings està aprop, tanquem posició regardless
-        if diffdays(dateearnings, datetime.now().strftime("%Y%m%d")) <= cf.mydaystoearnings:
-            allowtrade = 'EARNDATE'
+        if diffdays(dateearnings, datetime.now().strftime("%Y%m%d")) <= cf.mydaystoearnings: allowtrade = 'EARNDATE'
         elif sectype == "OPT":
             if pctprofitnow >= cf.myoptprofit: allowtrade = 'OPTW'
             elif pcttimeelapsed <= 10 and pctprofitnow > cf.myoptprofit10: allowtrade = 'OPTW-10-' + str(round(pctprofitnow))
@@ -65,8 +64,7 @@ def allowTrade(dateearnings, pcttimeelapsed, pctprofitnow, sectype, shortpositio
             elif pcttimeelapsed <= 50 and pctprofitnow > cf.myoptprofit50: allowtrade = 'OPTW-50-' + str(round(pctprofitnow))
             elif pcttimeelapsed <= 75 and pctprofitnow > cf.myoptprofit75: allowtrade = 'OPTW-75-' + str(round(pctprofitnow))
             if pctprofitnow <= cf.myoptloss: allowtrade = 'OPTL-' + str(round(pctprofitnow))
-            # de moment suprimim la opció de trade defensiu
-            #elif pctprofitnow <= cf.myoptlossdef and shortposition: allowtrade = 'OPTL -D'
+            elif pctprofitnow <= cf.myoptlossdef and shortposition: allowtrade = 'OPTL -D' + str(round(pctprofitnow))
         elif sectype == "STK":
             if pctprofitnow >= cf.mystkprofit: allowtrade = 'STK1-' + str(round(pctprofitnow))
             elif pctprofitnow <= cf.mystkloss: allowtrade = 'STK2-' + str(round(pctprofitnow))
@@ -92,16 +90,12 @@ def processopenpositions(ib, db):
                 dateentry = ibdb.get_positiondate(db, pos.account, pos.contract.conId)
                 datetoday = datetime.now().strftime("%Y%m%d")
                 dateexpiration = pos.contract.lastTradeDateOrContractMonth
-                #TEMPORAL DEGUT A INCONSISTENCIES A LA BBDD
-                #if dateentry == None or datetoday == None or dateexpiration == None:
-                #    pcttimeelapsed = 100
-                #else:
                 pcttimeelapsed = 100*diffdays(dateentry, datetoday) / diffdays(dateentry, dateexpiration)
             # comprobem si s'ha de fer alguna cosa
             allowtrade = allowTrade(dateearnings, pcttimeelapsed, pctprofitnow, pos.contract.secType, pos.position < 0)
             if allowtrade != None:
                 fmtprice = formatPrice(pos.marketPrice, 2)
-                if allowtrade == 'OPTL -D' and pos.position < 0:
+                if allowtrade.startswith('OPTL -D') and pos.position < 0:
                     opendefensiveoption(ib, db, pos.contract, pos.position, allowtrade)
                 else:
                     tradelimitorder(ib, db, pos.contract, -pos.position, fmtprice, ttype = allowtrade )              #-posició per tancar el què tenim

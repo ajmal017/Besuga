@@ -13,7 +13,7 @@ from besuga_ib_utilities import error_handling
 from besuga_ib_utilities import execute_query
 from besuga_ib_utilities import formatPrice
 import besuga_ib_utilities as ibutil
-import besuga_ib_manage_db_positions as ibdb
+import besuga_ib_manage_db as ibdb
 import besuga_ib_config as cf
 
 
@@ -21,8 +21,8 @@ import besuga_ib_config as cf
 # Per fer-ne anar + de 1, s'ha d'afegir a la BD-scancodes amb fromat scode: zzzz sdescriptions =[code1, AND, code 2, OR, code 3]
 # AND i OR són operadors lògics. Sempre va d'esquerra a dreta, no admet parèntesis
 def scanselection (db):
-    sql = "SELECT scode, ' - ', sdescription FROM scancodes ORDER BY scode"
-    rslt = ibutil.execute_query(db, sql)
+    sql = "SELECT scode, ' - ', sdescription FROM scancodes WHERE SONOFF = 1 ORDER BY scode"
+    rslt = execute_query(db, sql)
     text = str(rslt).strip('[]').replace("'", '').replace(",", '').replace('(', '').replace(')', '\n')
     scancode = input("triar els scans desitjats - exit per sortir: \n " + text)
     while scancode != "exit":
@@ -158,7 +158,7 @@ def getscannedstocks(ib, scandesc):
         raise
 
 
-def fillfundamentals(ib, stklst):
+def fillfundamentals(ib, db, stklst):
     print("\n\t fillfundamentals")
     try:
         # convertim stklist en una llista de llistes stklst = [[cnt]] per poder-hi fer cabre els fundamentals
@@ -170,20 +170,21 @@ def fillfundamentals(ib, stklst):
             aux = dict(t.split('=') for t in str(fr.fundamentalRatios)[18:-1].split(',') if t)
             fratios = {key.lstrip(): value for key, value in aux.items()}
             addfunds = requestadditionalfundamentals(ib, cnt)
+
+            # Primer omplim els fomnamentals amb les dades de l'últim valor a la BD (per si torna buit de IB)
+            stklst[i].extend(ibdb.dbget_lastfundamentals(db, cnt.conId)[3::])
             # we fill the list with fundamental data that we will use to update database + make computations to select
             # candidates to open positions
             if fratios != None:
-                stklst[i].append(fratios.get("AFEEPSNTM", ""))              # stklst[i][1]
-                stklst[i].append(fratios.get("Frac52Wk", ""))               # fraction of 52 week high/low - stklst[i][2]
-                stklst[i].append(fratios.get("BETA", ""))                   # stklst[i][3]
-                stklst[i].append(fratios.get("APENORM", ""))                # annual normalized PE - stklst[i][4]
-                stklst[i].append(fratios.get("QTOTD2EQ", ""))               # total debt/total equity - stklst[i][5]
-                stklst[i].append(fratios.get("EV2EBITDA_Cur", ""))          # Enterprise value/ebitda - TTM  - stklst[i][6]
-                stklst[i].append(fratios.get("TTMPRFCFPS", ""))             # price to free cash flow per share - TTM  - stklst[i][7]
-                stklst[i].append(fratios.get("YIELD", ""))                  # Dividend yield - stklst[i][8]
-                stklst[i].append(fratios.get("TTMROEPCT", ""))              # return on equity % - stklst[i][9]
-            else:
-                stklst[i].extend([0, 0, 0, 0, 0, 0, 0, 0, 0])
+                stklst[i][1] = fratios.get("AFEEPSNTM", "")              # stklst[i][1]
+                stklst[i][2] = fratios.get("Frac52Wk", "")               # fraction of 52 week high/low - stklst[i][2]
+                stklst[i][3] = fratios.get("BETA", "")                   # stklst[i][3]
+                stklst[i][4] = fratios.get("APENORM", "")                # annual normalized PE - stklst[i][4]
+                stklst[i][5] = fratios.get("QTOTD2EQ", "")               # total debt/total equity - stklst[i][5]
+                stklst[i][6] = fratios.get("EV2EBITDA_Cur", "")          # Enterprise value/ebitda - TTM  - stklst[i][6]
+                stklst[i][7] = fratios.get("TTMPRFCFPS", "")             # price to free cash flow per share - TTM  - stklst[i][7]
+                stklst[i][8] = fratios.get("YIELD", "")                  # Dividend yield - stklst[i][8]
+                stklst[i][9] = fratios.get("TTMROEPCT", "")              # return on equity % - stklst[i][9]
                 '''
                 Not used attributes????
                 vcurrency = fratios.get("CURRENCY", "")
@@ -193,13 +194,11 @@ def fillfundamentals(ib, stklst):
                 vevcur = fratios.get("EV-Cur", "")  # Current enterprise value
                 '''
             if addfunds != None:
-                stklst[i].append(addfunds["TargetPrice"])                   # stklst[i][10]
-                stklst[i].append(addfunds["ConsRecom"])                     # stklst[i][11]
-                stklst[i].append(addfunds["ProjEPS"])                       # stklst[i][12]
-                stklst[i].append(addfunds["ProjEPSQ"])                      # stklst[i][13]
-                stklst[i].append(addfunds["ProjPE"])                        # stklst[i][14]
-            else:
-                stklst[i].extend([0, 0, 0, 0, 0])
+                stklst[i][10] = addfunds["TargetPrice"]                   # stklst[i][10]
+                stklst[i][11] = addfunds["ConsRecom"]                     # stklst[i][11]
+                stklst[i][12] = addfunds["ProjEPS"]                       # stklst[i][12]
+                stklst[i][13] = addfunds["ProjEPSQ"]                      # stklst[i][13]
+                stklst[i][14] = addfunds["ProjPE"]                        # stklst[i][14]
             for j in range(1, len(stklst[i])):
                 if stklst[i][j] == '': stklst[i][j] = 0
                 if stklst[i][j] == 'nan': stklst[i][j] = 0
@@ -291,7 +290,7 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
         lastpricestk = ib.reqTickers(cnt)[0].marketPrice()
         # busquem la cadena d'opcions del underlying
         chains = ib.reqSecDefOptParams(cnt.symbol, '', cnt.secType, cnt.conId)
-        chain = next(c for c in chains if c.tradingClass == cnt.symbol and c.exchange == 'SMART')
+        chain = next(c for c in chains if c.tradingClass == cnt.symbol and c.exchange == cf.myprefexchange)
 
         # separem strikes i expiracions (tenir en compte que strikes i expiracions estan en forma de Set, no de List
         lstrikes = chain.strikes
@@ -304,19 +303,12 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
         # busquem la expiration que més s'acosta a desiredexpiration
         lexps = []
         for e in chain.expirations: lexps.append(int(e))
-        desiredexpiration = date.today() + timedelta(days=optdaystoexp)
-        desiredexpiration = int(str(desiredexpiration)[0:4] + str(desiredexpiration)[5:7] + str(desiredexpiration)[8:10])
-        orderexp = min(lexps, key=lambda x: abs(int(x) - desiredexpiration))
 
-        # preparem el nou trade: definim i qualifiquem la nova opció
-        optcnt = ibsync.Contract()
-        optcnt.symbol = cnt.symbol
-        optcnt.strike = orderstrike
-        optcnt.secType = "OPT"
-        optcnt.exchange = cf.myprefexchange
-        optcnt.currency = cnt.currency
-        optcnt.right = optright
-        optcnt.lastTradeDateOrContractMonth = orderexp
+        desiredexpiration = (date.today() + timedelta(days=optdaystoexp)).strftime('%Y%m%d')
+        orderexp = min(lexps, key=lambda x: abs(int(x) - int(desiredexpiration)))
+
+        # definim la nova opció
+        optcnt = ibutil.get_optionfromunderlying(cnt, optright, orderstrike, orderexp)
 
         # no tots els strikes possibles (entre ells potser el ja triat) són vàlids.
         # si el strike triat no és vàlid en busquem un que sigui vàlid apujant (i baixant) el strike en 0.5
@@ -330,27 +322,39 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
         # busquem el preu al que cotitza la nova opció de la que obrirem contracte
         lastpriceopt = formatPrice(ib.reqTickers(optcnt)[0].marketPrice(), 2)
 
-        # fem un reqN¡MktData per obtenir (hopefully) els Greeks
-        opttkr = ib.reqMktData(optcnt, '', False, False)            # això torna un objecte Ticker
-        l = 0
-        while (opttkr.lastGreeks == None) and l < 5:  # mini-bucle per esperar que es rebin els Greeks
-            opttkr = ib.reqMktData(optcnt, '', False, False)
-            ib.sleep(5)
-            l += 1
+        # (intentem) recuperar els greeks
+        greeks = ibutil.get_greeks(ib, optcnt).modelGreeks
+
         # definim la quantitat = (Capital màxim)/(100*preu acció*Delta)
         # en cas que la delta torni buida, usem 0.5 (de moment agafem opcions AtTheMoney igualment)
         delta = 0.5
-        if (opttkr.lastGreeks is not None):
-            if (opttkr.lastGreeks.delta is not None):
-                delta = opttkr.lastGreeks.delta
+        if (greeks is not None):
+            if (greeks.delta is not None): delta = greeks.delta
         qty = (1-2*(opttype == "SELL"))*round(cf.mymaxposition/(100*lastpricestk*abs(delta)))
+
         print("symbol  ", optcnt.symbol, "lastpricestk  ", lastpricestk, "desiredstrike", lastpricestk,
               "orderstrike  ", orderstrike, "desiredexpiration", desiredexpiration, "orderexp  ", orderexp,
               "quantity", qty, "conId", optcnt.conId, "lastpriceopt", lastpriceopt)
+
         if lastpriceopt == lastpriceopt:                            #checks if nan
             return tradelimitorder(ib, db, optcnt, qty, lastpriceopt, scode = scancode)
         else:
             return None
+    except Exception as err:
+        #error_handling(err)
+        raise
+
+
+def openpositions(ib, db, accid):
+    try:
+        scansel = scanselection(db)
+        scancode, scandesc = scansel[0], scansel[1]
+        # getscannedstocks torna una llista de Contracts
+        scannedstocklist = getscannedstocks(ib, scandesc)
+        # fill fundamentals omple les llistes [contract(i), fundamentals(i)]
+        scannedstocklist = fillfundamentals(ib, db, scannedstocklist)
+        ibdb.dbfill_fundamentals(db, accid, scannedstocklist)
+        return processpreselectedstocks(ib, db, accid, scannedstocklist, scancode)
     except Exception as err:
         #error_handling(err)
         raise
@@ -364,41 +368,91 @@ def tradelimitorder(ib, db, contract, quantity, price, scode= None, ttype = None
         order = ibsync.LimitOrder(ordertype, abs(quantity), price, tif="GTC", transmit=False)
         ib.qualifyContracts(contract)
         trade = ib.placeOrder(contract, order)
-        ib.sleep(1)
         assert trade in ib.trades()
         assert order in ib.orders()
         # Insertem el contracte a la taule Contract (si no hi és)
         ibdb.dbfill_contracts(db, [contract])
-        sql = "INSERT INTO orders (oOrderId, oClientId, oConId, oQuantity, oStatus, oScanCode, oTradeType) "\
-            " VALUES (%s, %s, %s, %s, %s, %s, %s)"
-        val = (order.orderId, order.clientId, trade.contract.conId, order.totalQuantity, trade.orderStatus.status, scode, ttype)
-        execute_query(db, sql, val, True)
+        ibdb.dbfill_orders(db, order, trade, scode, ttype)
         return trade
     except Exception as err:
         #error_handling(err)
         raise
 
 
-def openpositions(ib, db, accid):
+
+# Strategy #1: Strategy VXX 70/30 Short Call Strategy (Course: Entry Level And Highly Profitable Options Trading Strategy):
+def branco_strategy1(ib,db, accid):
     try:
-        scansel = scanselection(db)
-        scancode, scandesc = scansel[0], scansel[1]
-        # getscannedstocks torna una llista de Contracts
-        scannedstocklist = getscannedstocks(ib, scandesc)
-        # fill fundamentals omple les llistes [contract(i), fundamentals(i)]
-        scannedstocklist = fillfundamentals(ib, scannedstocklist)
-        ibdb.dbfill_contractfundamentals(db, accid, scannedstocklist)
-        return processpreselectedstocks(ib, db, accid, scannedstocklist, scancode)
+        cnt = ibsync.Stock('VXX', 'SMART', 'USD')
+        ib.qualifyContracts(cnt)
+        pricevxx = ib.reqTickers(cnt)[0].marketPrice()
+
+        chains = ib.reqSecDefOptParams(cnt.symbol, '', cnt.secType, cnt.conId)
+        chain = next(c for c in chains if c.tradingClass == cnt.symbol and c.exchange == cf.myprefexchange)
+
+        lexps = []
+        for e in chain.expirations: lexps.append(int(e))
+        desiredexpiration = (date.today() + timedelta(days=15)).strftime('%Y%m%d')
+        expiration = min(lexps, key=lambda x: abs(int(x) - int(desiredexpiration)))
+        strikes = [strike for strike in chain.strikes if (pricevxx* 0.9 < strike < pricevxx * 1.1 )]
+
+        contracts = [ibsync.Option('VXX', expiration, strike, "C", 'SMART', tradingClass='VXX')
+                     for strike in strikes]
+        ib.qualifyContracts(*contracts)
+        greeks = [ibutil.get_greeks(ib, contract).modelGreeks
+                  for contract in contracts]
+        deltas = [greek.delta for greek in list(filter(None, greeks))]
+
+        ishort = int(min(range(len(deltas)), key=lambda i: abs(deltas[i] - 0.7)))
+        ilong = int(min(range(len(deltas)), key=lambda i: abs(deltas[i] - 0.3)))
+
+        combo = ibsync.Contract()
+        combo.symbol = "VXX"
+        combo.secType = "BAG"
+        combo.exchange = "SMART"
+        combo.currency = "USD"
+
+        leg1 = ibsync.ComboLeg ()
+        leg1.conId = contracts[ishort]
+        leg1.ratio = 1
+        leg1.action = "SELL"
+        leg1.exchange = "SMART"
+
+        leg2 = ibsync.ComboLeg()
+        leg2.conId = contracts[ilong]
+        leg2.ratio = 1
+        leg2.action = "BUY"
+        leg2.exchange = "SMART"
+
+        combo.comboLegs = []
+        combo.comboLegs.append(leg1)
+        combo.comboLegs.append(leg2)
+
+        order = ibsync.order.LimitOrder("BUY", 1, 1, tif="GTC", transmit=False)
+        trade = ib.placeOrder(combo, order)
+
+        #combo = ibsync.Contract(symbol='VXX', secType='BAG', exchange='SMART', currency='USD',
+        #                 comboLegs=[
+        #                     ibsync.ComboLeg(conId=contracts[ishort], ratio=1, action='SELL', exchange='SMART'),
+        #                     ibsync.ComboLeg(conId=contracts[ilong], ratio=1, action='BUY', exchange='SMART')
+        #                 ]
+        #                 )
+        #trade = tradelimitorder(ib, db, combo, 1, 1, "BRANCO_1")
+        #order = ibsync.LimitOrder(action='SELL', totalQuantity=1, lmtPrice=1, transmit=False, account=accid)
+        #trade = ib.placeOrder(combo, order)
+        print(trade)
     except Exception as err:
-        #error_handling(err)
+        # error_handling(err)
         raise
+
+
 
 
 if __name__ == "__main__":
     try:
         myib = ibsync.IB()
         mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
-        acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
+        acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2', 'XAVREAL' ")
         if acc == "besugapaper":
             rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
         elif acc == "xavpaper":
@@ -407,14 +461,26 @@ if __name__ == "__main__":
             rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
         elif acc == "mavpaper2":
             rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
+        elif acc == "XAVREAL":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavreal7496'")
         else:
             sys.exit("Unknown account!!")
         myib.connect(rslt[0][0], rslt[0][1], 1)
         myaccId = rslt[0][2]
         myorderdict = {}
 
-        openpositions(myib, mydb, myaccId)
+        #openpositions(myib, mydb, myaccId)
+        #cds = myib.reqContractDetails(ibsync.contract.Option('WTTR', '20190719', exchange='SMART'))
+        #options = [cd.contract for cd in cds]
+        #tickers = [t for i in range(0, len(options), 100) for t in myib.reqTickers(*options[i:i + 100])]
+        #import pandas as pd
+        #ibutil.save_to_excel(pd.DataFrame(tickers))
 
+        #opt = ibsync.contract.Option('WTTR', '20190719', 12.5, 'C' , exchange='SMART')
+        # (intentem) recuperar els greeks
+        #greeks = ibutil.get_greeks(myib, opt, "lastGreeks").modelGreeks
+
+        branco_strategy1(myib, mydb, myaccId)
 
         ibutil.dbdisconnect(mydb)
         myib.disconnect()

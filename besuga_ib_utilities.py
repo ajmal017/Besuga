@@ -11,6 +11,8 @@ import mysql.connector as sqlconn
 import pandas as pd
 import numpy as np
 
+# Local application imports
+import besuga_ib_config as cf
 
 def error_handling (e, initial_text='Exception'):
     print("\n ", initial_text)
@@ -21,7 +23,7 @@ def error_handling (e, initial_text='Exception'):
     traceback.print_exc()
 
 
-def save_to_excel(data_frame, out_path = 'C;/TEST.xlsx', sheet_name='Sheet 1'):
+def save_to_excel(data_frame, out_path = 'C:/Users/xavie/Documents/TEST.xlsx', sheet_name='Sheet 1'):
     # crea o sobreescriu un excel amb la informació del dataframe data_frame
     # out_path nome del fitxer (amb path: C:/xxx/yyy.xlsx)
     # sheeet_name nom del sheet
@@ -124,6 +126,7 @@ def get_openpositions(ib):
         #error_handling(err)
         raise
 
+
 # Torna una llista amb un objectePNL [PnL(account='...', dailyPnL=nnnn, unrealizedPnL=-nnn, realizedPnL=nnn)]
 def get_pnl(ib, accid):
     ib.reqPnL(accid, '')
@@ -156,6 +159,71 @@ def accountAnalysis(ib):
     except Exception as err:
         #error_handling(err)
         raise
+
+
+# Calcula el PNL  de les posicions obertes per tipus (calls, puts o stocks)
+def dbget_pnlbyright(ib):
+    try:
+        pnl = [0,0,0,0,0,0] #pnl = [num calls, PNL calls, num puts, PNL puts, num stocks, PNL stocks]
+        for pos in ib.portfolio():
+            i = 6       # 6 perquè peti si alguna cosa falla (sortirà de rang)
+            if(pos.contract.secType == "STK"): i = 4
+            elif (pos.contract.secType == "OPT"):
+                if (pos.contract.right == "C"): i=0
+                elif (pos.contract.right == "P"): i=2
+            pnl[i] += 1
+            pnl[i+1] += (pos.unrealizedPNL)
+        return pnl
+    except Exception as err:
+        # error_handling(err)
+        raise
+
+# Not used??
+#def get_contractticker(ib, opt):
+#    try:
+#        details = ib.reqContractDetails(opt)
+#        ticker = ib.reqMktData(opt, '', False, False)            # això torna un objecte Ticker
+#        l = 0
+#        while (ticker.lastGreeks == None) and l < 5:  #          mini-bucle per esperar que es rebin els Greeks
+#            ticker = ib.reqMktData(opt, '', False, False)
+#            ib.sleep(1)
+#            l += 1
+#        return ticker
+#    except Exception as err:
+#        # error_handling(err)
+#        raise
+
+
+def get_optionfromunderlying(cnt, optright, strike, expdate):
+    try:
+        # preparem el nou trade: definim i qualifiquem la nova opció
+        option = ibsync.Contract()
+        option.symbol = cnt.symbol
+        option.strike = strike
+        option.secType = "OPT"
+        option.exchange = cf.myprefexchange
+        option.currency = cnt.currency
+        option.right = optright
+        option.lastTradeDateOrContractMonth = expdate
+        return option
+    except Exception as err:
+        # error_handling(err)
+        raise
+
+
+# Torna un objecte Ticker que conté, entre d'altres, els diferents Greeks (ask, bid, last, model
+def get_greeks(ib, opt):
+    ib.qualifyContracts(opt)
+    ib.reqMarketDataType(4)
+    if opt.secType != "OPT": return None
+    optticker = ib.reqMktData(opt, '100,101,104,105,106', False, False)
+    l = 0
+    while (optticker.lastGreeks == None) and l < 10:  # mini-bucle per esperar que es rebin els Greeks
+        optticker = ib.reqMktData(opt, '100,101,104,105,106', False, False)
+        ib.sleep(1)
+        l += 1
+    #return getattr(optticker, type)
+    return optticker
 
 
 # trunquem els decimals del preu per què IB accepti el preu
@@ -210,19 +278,23 @@ def dbrollback (connection):
         #error_handling(e)
         raise
 
-
-def execute_query(db, query, values=None, commit=True):
+# Executa la query. colnames =  True torna una NamedTuple usant els noms de les columnes de la BD
+def execute_query(db, query, values=None, commit=True, colnames = False):
     try:
         cursor = db.cursor()
         cursor.execute(query, values)
-        if (query.startswith('SELECT')):
-            return cursor.fetchall()
-        elif (query.startswith('INSERT')):
-            if commit: db.commit()
-            return cursor.lastrowid
-        elif (query.startswith('UPDATE') or query.startswith('DELETE')):
-            if commit: db.commit()
-            return cursor.rowcount
+        if colnames:
+            columns = cursor.description
+            return [{columns[index][0]: column for index, column in enumerate(value)} for value in cursor.fetchall()]
+        else:
+            if (query.startswith('SELECT')):
+                return cursor.fetchall()
+            elif (query.startswith('INSERT')):
+                if commit: db.commit()
+                return cursor.lastrowid
+            elif (query.startswith('UPDATE') or query.startswith('DELETE')):
+                if commit: db.commit()
+                return cursor.rowcount
     except Exception as err:
         #error_handling(err)
         if (db.is_connected()):
@@ -232,3 +304,36 @@ def execute_query(db, query, values=None, commit=True):
         raise
     finally:
         if (db.is_connected()): cursor.close()
+
+
+if __name__ == '__main__':
+    try:
+        import besuga_ib_utilities as ibutil
+        myib = ibsync.IB()
+        mydb = ibutil.dbconnect("localhost", "besuga", "xarnaus", "Besuga8888")
+        acc = input("triar entre 'besugapaper', 'xavpaper', 'mavpaper1', 'mavpaper2'")
+        if acc == "besugapaper":
+            rslt = execute_query(mydb,"SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'besugapaper7498'")
+        elif acc == "xavpaper":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'xavpaper7497'")
+        elif acc == "mavpaper1":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper1'")
+        elif acc == "mavpaper2":
+            rslt = execute_query(mydb, "SELECT connHost, connPort, connAccId FROM connections WHERE connName = 'mavpaper2'")
+        else:
+            sys.exit("Unknown account!!")
+        myib.connect(rslt[0][0], rslt[0][1], 3)
+        myaccId = rslt[0][2]
+
+        #opt = ibsync.Stock(symbol="SHOP", exchange="SMART", currency="USD")
+        opt = ibsync.Option(symbol="SHOP", exchange="SMART", currency="USD", lastTradeDateOrContractMonth  = "20190726", strike = "310", right = "P")
+        #myib.qualifyContracts(opt)
+        print(get_greeks(myib, opt, "lastGreeks"))
+
+
+        ibutil.dbcommit(mydb)
+        ibutil.dbdisconnect(mydb)
+        myib.disconnect()
+    except Exception as err:
+        error_handling(err)
+        raise

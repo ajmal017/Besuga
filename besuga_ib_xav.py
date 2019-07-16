@@ -7,7 +7,7 @@ import ib_insync as ibsync
 # Local application imports
 import  besuga_ib_close_positions as ibclose
 import besuga_ib_open_positions as ibopen
-import  besuga_ib_manage_db_positions as ibmanagedb
+import  besuga_ib_manage_db as ibmanagedb
 import besuga_ib_utilities as ibutil
 import besuga_ib_config as cf
 
@@ -42,7 +42,7 @@ if __name__ == '__main__':
         myib.reqMarketDataType(4)
         myorderdict = {}
         q = input(" 1 - Manage DB Positions \n 2 - Open Positions \n 3 - Close Positions \n 4 - Fill Earnings Date \n"
-                  " 5 - Fill account history \n All - Manage-Open-Close \n")
+                  " 5 - Fill account history \n 6 - Fill Greeks \n All - Manage-Open-Close \n")
         while q != "exit":
             if q == "1":
                 ibmanagedb.manage_positions(myib, mydb, myaccId)
@@ -58,6 +58,9 @@ if __name__ == '__main__':
                 break
             elif q == "5":
                 ibmanagedb.dbfill_accounthistory(myib, mydb, myaccId)
+                break
+            elif q == "6":
+                ibmanagedb.dbfillall_greeks(myib, mydb, myaccId)
                 break
             elif q.upper() == "ALL":
                 ibmanagedb.manage_positions(myib, mydb, myaccId)

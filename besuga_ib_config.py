@@ -1,5 +1,6 @@
 #General Parameters
 myprefexchange = "SMART"
+mycurrency = "USD"
 myclientid = 88
 
 #Capital-related
@@ -31,11 +32,11 @@ myoptselldte = 45           # desired option days to expiration when selling opt
 myoptbuydte = 180           # desired option days to expiration when buying options
 myoptprofit = 80            # tanquem posicions al mypctprofit% de guany
 myoptprofit10 = 30          # tanquem posicions al mypctprofit10% de guany si el temps transcorregut <= 10%
-myoptprofit20 = 40          # tanquem posicions al mypctprofit40% de guany si el temps transcorregut <= 40%
-myoptprofit50 = 65          # tanquem posicions al mypctprofit65% de guany si el temps transcorregut <= 65%
+myoptprofit20 = 40          # tanquem posicions al mypctprofit40% de guany si el temps transcorregut <= 20%
+myoptprofit50 = 65          # tanquem posicions al mypctprofit65% de guany si el temps transcorregut <= 50%
 myoptprofit75 = 75          # tanquem posicions al mypctprofit75% de guany si el temps transcorregut <= 75%
 myoptlossdef = -75          # per opcions vengudes: obrim una defensiva al myoptlossdef de pèrdues
-myoptloss = -65             # tanquem posicions al myoptloss% de pèrdues
+myoptloss = -50            # tanquem posicions al myoptloss% de pèrdues
 
 # Stock
 mystkprofit = 20            # tanquem posicions al mystkprofit% de guany
