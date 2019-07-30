@@ -64,7 +64,7 @@ if __name__ == '__main__':
                 break
             elif q.upper() == "ALL":
                 ibmanagedb.manage_positions(myib, mydb, myaccId)
-                ibopen.openpositions(myib, mydb, myaccId)
+                ibopen.openpositions_fromscan(myib, mydb, myaccId)
                 myib.sleep(10)
                 ibclose.processopenpositions(myib, mydb)
                 break

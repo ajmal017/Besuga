@@ -19,6 +19,11 @@ myscanlocation = 'STK.US.MAJOR'
 myscanvolabove= 200000
 myscanmktcapabove = 10000000000
 myscanavgvoloptabove = 10000
+# Wikipedia params ('http://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
+myurl = 'http://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+myprdnum =  5               # prdnum = número de periodes (1,2,10,35, etc)
+myprdscale = "Y"            # prdscale = unitat en la que es mesuren els periodes:(S(segons),D (dia), W(semana), M(mes), Y(any)
+mybarsixe = "1 week"        # barsize: duració temporal de cada "bar": "1 secs", "30 mins", "1 hour", "1 day", "1 week", "1 month"
 
 # open/close parameters
 myaction = 'SELL'               # Determina si comprem (BUY), venem (SELL) o una de cada (BOTH)

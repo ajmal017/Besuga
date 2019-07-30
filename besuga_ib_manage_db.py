@@ -30,12 +30,14 @@ def get_currentcontracts(ib):
         raise
 
 
-# torna la data d'obertura d'una posició oberta (només n'hi pot haver una d'oberta per account i contracte)
-# La torna en format YYYYmmdd (20120925)
+# torna la data d'obertura d'una posició oberta. La torna en format YYYYmmdd (20120925)
+# Si n'hi ha més d'una d'oberta pel mateix contracte, torna la més antiga
+# ULL: xapussa a corretgir!!!!!!!!!!!!!!!!!!
 def get_positiondate(db, accid, conid):
     try:
         sql = "SELECT DATE_FORMAT(pdate, '%Y%m%d') FROM positions " \
-            "WHERE pAccId =  '" + str(accid) + "' AND pConId = " + str(conid) + " AND pActive = 1 "
+            " WHERE pAccId =  '" + str(accid) + "' AND pConId = " + str(conid) + " AND pActive = 1 " \
+            " ORDER by pDate LIMIT 1"
         execs = execute_query(db, sql)
         if not execs:
             #raise Exception (" No hi ha cap posició a la base de dades pel contracte ", conid )
@@ -49,19 +51,30 @@ def get_positiondate(db, accid, conid):
         raise
 
 
+# Mira si hi ha una posició oberta pel subjacent
+def positionisopen(db, accid, symbol):
+    sql = "SELECT * FROM openpositions WHERE pAccId =  '" + str(accid) + "' AND kSymbol = '" + str(symbol) + "' "
+    execs = execute_query(db, sql)
+    if execs != []:  return True
+    else: return False
+
+
 def inputearningsdate (conid , symbol ):
-    # Demanem la data d'Earnings
-    q = input("Entra la Earnings Date (yyyymmdd) per " + str(conid) + "-" + str(symbol) + " - Return to exit ")
-    while q != "":
-        if q.isdigit():
-            if not (len(q) == 8 and int(q[:4]) > 2018 and int(q[4:6]) < 13 and int(q[6:8]) < 32):
-                q = input("Wrong format!! - Correct format is yyyymmdd ")
+    try:
+        q = input("Entra la Earnings Date (yyyymmdd) per " + str(conid) + "-" + str(symbol) + " - Return = '20880808' ")
+        while q != "":
+            if q.isdigit():
+                if not (len(q) == 8 and int(q[:4]) > 2018 and int(q[4:6]) < 13 and int(q[6:8]) < 32):
+                    q = input("Wrong format!! - Correct format is yyyymmdd ")
+                else:
+                    break
             else:
-                break
-        else:
-            q = input("Wrong format!! - Correct format is yyyymmdd ")
-    if q == "": q = cf.mydefaultearndate        # Si apretem Enter, posem la per defect (20880808)
-    return q
+                q = input("Wrong format!! - Correct format is yyyymmdd ")
+        if q == "": q = cf.mydefaultearndate        # Si apretem Enter, posem la per defect (20880808)
+        return q
+    except Exception as err:
+        #error_handling(err)
+        raise
 
 
 # torna la 'earnings date' del contracte. La torna en format YYYYmmdd (20120925)
@@ -72,16 +85,29 @@ def getearningsdate(db, conid, symbol):
         execs = execute_query(db, sql)
         if not execs:
             print(" El contracte  ", conid, " no existeix a la base de dades ")
+            return None
         elif execs[0][0] == None:
             print(" La Earnings Date no existeix pel contracte ", str(conid), "-" , str(symbol))
             earningsdate = inputearningsdate(conid, symbol)
             # ULL!!!!!! Si la data no està entrada, posem un valor suficientment allunyat per no sortir de la posició
             if earningsdate != None:
-                return earningsdate
+                return datetime.strptime(earningsdate, "%Y%m%d").date()
             else:
                 return (datetime.now() + timedelta(days=cf.mydaystoearnings + 1)).strftime("%Y%m%d")
         else:
-            return execs[0][0]
+            return datetime.strptime(execs[0][0], "%Y%m%d").date()
+    except Exception as err:
+        #error_handling(err)
+        raise
+
+def getprevioustargetprice(db, conid, accid ):
+    try:
+        sql = "SELECT cfs.fTargetPrice FROM contracts c RIGHT JOIN contractfundamentals cfs on c.kConId = cfs.fConId " + \
+            " WHERE cfs.fConId = '" + str(conid) + "' AND cfs.fAccId = '" + str(accid) + "' AND cfs.fDate < DATE(NOW()) " + \
+            " ORDER BY cfs.fDate DESC LIMIT 1 "
+        rst = execute_query(db, sql)
+        if rst != []: return rst[0][0]
+        else: return 0
     except Exception as err:
         #error_handling(err)
         raise
@@ -104,7 +130,7 @@ def dbfill_earningsdate(db):
             for i in range(len(execs)):
                 earningsdate = inputearningsdate(execs[i][0], execs[i][1])
                 sql = "UPDATE contracts SET kEarningsDate = " + str(earningsdate) + \
-                      " WHERE kConId= '" + str(execs[i][0]) + "' "
+                      " WHERE kSymbol= '" + str(execs[i][1]) + "' "
                 execute_query(db, sql)
     except Exception as err:
         # error_handling(err)
@@ -117,7 +143,7 @@ def get_executions(ib):
         execs = ib.reqExecutions()
         lst = []
         for i in range(len(execs)):
-            print('Getting execution ' + str(execs[i].execution.execId))
+            print('Getting execution ' + str(i) + ': ' + str(execs[i].execution.execId))
             lst2 = []   # els valors a inserir a la DDBB aniran a lst2 (1 lst2 per cada execs[i])
             lst2.append(execs[i].execution.execId)  # lst2[0]
             lst2.append(execs[i].execution.acctNumber)  # lst2[1]
@@ -222,7 +248,12 @@ def dbanalyse_positions(db, accId):
             execs = execute_query(db, sql)
             # mirem si l'últim registre està actiu (com a molt pot ser l'últim), si està actiu no cal fer-li res
             stop = len(execs)
-            if execs[len(execs)-1][21] == 1:  stop = len(execs)-1
+            if execs[len(execs) - 1][21] == 1:
+                stop = len(execs) - 1
+            # mirem també si hi ha posicions comprades i venudes. Si totes soón del mateix signe no cal fer res
+            list_numshares = [execs[item][8] for item in range(len(execs))]
+            if  not(any(sign(item) != sign(list_numshares[0]) for item in list_numshares[1:])):
+               stop = 0
             for h in range(0, len(execs)):  execs[h] = list(execs[h])  # convertim la tupla en una list
             j, new_k, new_j = 0, stop, stop
             for h in (y for y in range(j + 1, stop) if sign(execs[y][8]) != sign(execs[j][8])):
@@ -290,7 +321,7 @@ def dbfill_orders(db, order, trade, scode, ttype):
     try:
         sql = "INSERT INTO orders (oOrderId, oClientId, oConId, oQuantity, oStatus, oScanCode, oTradeType) " \
               " VALUES (%s, %s, %s, %s, %s, %s, %s)"
-        check = execute_query(db, "SELECT * FROM contracts WHERE kConId = " + str(trade.contract.conId))
+        check = execute_query(db, "SELECT * FROM orders WHERE oOrderId = " + str(order.orderId) + " AND oClientId = " + str(order.clientId))
         if (not check):
             val = (order.orderId, order.clientId, trade.contract.conId, order.totalQuantity, trade.orderStatus.status, scode, ttype)
             execute_query(db, sql, val, True)

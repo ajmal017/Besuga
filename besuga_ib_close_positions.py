@@ -1,6 +1,6 @@
 # Standard library imports
 import sys
-from datetime import datetime
+from datetime import date, datetime
 
 # Third party imports
 import ib_insync as ibsync
@@ -55,8 +55,10 @@ def opendefensiveoption(ib, db, opt, pos, tradetype):
 def allowTrade(dateearnings, pcttimeelapsed, pctprofitnow, sectype, shortposition):
     try:
         allowtrade = None
-        # si la data de Earnings està aprop, tanquem posició regardless
-        if diffdays(dateearnings, datetime.now().strftime("%Y%m%d")) <= cf.mydaystoearnings: allowtrade = 'EARNDATE'
+        # si la data de Earnings està aprop, tanquem posició, regardless
+        daystoearnings = (dateearnings - date.today()).days
+        if date.today().weekday() > 2:  daystoearnings -= 2                 # tenim en compte el cap de setmana
+        if daystoearnings <= cf.mydaystoearnings: allowtrade = 'EARNDATE'
         elif sectype == "OPT":
             if pctprofitnow >= cf.myoptprofit: allowtrade = 'OPTW'
             elif pcttimeelapsed <= 10 and pctprofitnow > cf.myoptprofit10: allowtrade = 'OPTW-10-' + str(round(pctprofitnow))

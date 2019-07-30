@@ -7,6 +7,10 @@ from datetime import date, timedelta
 # Third party imports
 import ib_insync as ibsync
 import xmltodict
+import bs4 as bs
+import requests as rq
+import statistics as stats
+
 
 # Local application imports
 from besuga_ib_utilities import error_handling
@@ -17,11 +21,65 @@ import besuga_ib_manage_db as ibdb
 import besuga_ib_config as cf
 
 
+def save_tickers(source):
+    resp = rq.get(source)
+    soup = bs.BeautifulSoup(resp.text, 'lxml')
+    table = soup.find('table', {'class': 'wikitable sortable'})
+    table = table.findAll('tr')
+    tickers = []
+    for row in table[1:]:
+        ticker = row.findAll('td')[0].text
+        ticker= ticker.rstrip("\n")
+        tickers.append(ticker)
+    return tickers
+
+
+# prdnum = número de periodes (1,2,10,35, etc)
+# prdscale = unitat en la que es mesuren els periodes:(S(segons),D (dia), W(semana), M(mes), Y(any)
+# barsize: duració temporal de cada "bar": "1 secs", "5 secs", "10 secs", "15 secs", "30 secs"
+# "1 min", "2 mins", "3 mins", "5 mins", "10 mins", "15 mins", "20 mins", "30 mins"
+# "1 hour", "2 hours", "4 hours", "8 hours"
+# "1 day", "1 week", "1 month"
+# time periods allowed: S(seconds), D(days),W(weeks),M(months),Y(year)
+# tickerId: A unique identifier which will serve to identify the incoming data
+# endDatetime: the request's end date and time (the empty string indicates current present moment)
+def requesthistoricaldata(ib, cnt, prdnum, prdscale, barsize):
+    try:
+        bars = ib.reqHistoricalData(cnt, endDateTime='', durationStr=str(prdnum)+ " " + prdscale,
+                                    barSizeSetting=barsize, whatToShow="MIDPOINT", useRTH=True)
+        # fem una llista amb els CLOSE per a cada unitat del periode que analitzem (menys el 'dia' d'avui)
+        listbars = [bars[i].close for i in range(len(bars)-1)]
+
+        #calculem el màxim i el múnim del periode per a poder determinar puts de breakout (al alça i a la baixa)
+        maxbars = max(listbars, key=lambda x: x)
+        minbars = min(listbars, key=lambda x: x)
+
+        # també calculem la desviació estandard, perquè és cool i queda molt quant
+        stdbars = round(stats.stdev(listbars),2)
+
+        # busquem el preu al que cotitza el contracte
+        lastpricecnt = formatPrice(ib.reqTickers(cnt)[0].marketPrice(), 2)
+
+        if lastpricecnt > maxbars:
+            print(cnt.symbol," ----------- nou màxim","maxbars", maxbars, "minbars", minbars, "lastpricecnt", lastpricecnt, "stdbars", stdbars)
+            return 1
+        elif lastpricecnt < minbars:
+            print(cnt.symbol," ----------- nou minim","maxbars", maxbars, "minbars", minbars, "lastpricecnt", lastpricecnt, "stdbars", stdbars)
+            return -1
+        else:
+            print(cnt.symbol, "res a fer","maxbars", maxbars, "minbars", minbars, "lastpricecnt", lastpricecnt, "stdbars", stdbars)
+            return 0
+
+    except Exception as e:
+        # error_handling(e)
+        raise
+
+
 # Triem quin scan volem córrer. Si només en fem córrer 1, codi = descripció.
 # Per fer-ne anar + de 1, s'ha d'afegir a la BD-scancodes amb fromat scode: zzzz sdescriptions =[code1, AND, code 2, OR, code 3]
 # AND i OR són operadors lògics. Sempre va d'esquerra a dreta, no admet parèntesis
 def scanselection (db):
-    sql = "SELECT scode, ' - ', sdescription FROM scancodes WHERE SONOFF = 1 ORDER BY scode"
+    sql = "SELECT scode, ' - ', sdescription, ' - Tipus ', stype FROM scancodes WHERE sonoff = 1 ORDER BY scode"
     rslt = execute_query(db, sql)
     text = str(rslt).strip('[]').replace("'", '').replace(",", '').replace('(', '').replace(')', '\n')
     scancode = input("triar els scans desitjats - exit per sortir: \n " + text)
@@ -33,8 +91,8 @@ def scanselection (db):
             print("Scan desconegut!")
             scancode = input("")
     if scancode == "exit": sys.exit("Exit requested!")
-    scanselection = [scancode]+ [item[2] for item in rslt if item[0] == scancode]
-    return scanselection                    # [code, description]
+    scanselection = [[scancode, item[2],item[4]] for item in rslt if item[0] == scancode]
+    return scanselection[0]                    # [code, description, type]
 
 
 # Torna una llista d'stocks depenent de la llista d'scans i de l'operador lògic (AND, OR o ``)
@@ -209,28 +267,26 @@ def fillfundamentals(ib, db, stklst):
         #error_handling(err)
         raise
 
-
-def processpreselectedstocks(ib, db, accid, stklst, scancode):
-    print("\n\t processpreselectedstocks")
+# processem els stocks provinents de l'scan de IB
+def processscannedstocks(ib, db, accid, stklst, scancode):
+    print("\n\t processscannedstocks")
     try:
         listorders = []
         for i in range(len(stklst)):
             cnt = stklst[i][0]                                                  # contract
             targetprice = stklst[i][10]                                         # target price
             frac52w = stklst[i][2]                                              # distància a la que està del high/low
-            bolb, bols = (cf.myaction == 'BUY'), (cf.myaction == 'SELL')       # booleans per decidir què fem
-            # si no té historial (fdate = Now només) no faig res
-            # tampoc faig res si la Earnings Date és massa propera
-            sql =  "SELECT cfs.fTargetPrice FROM contracts c "+\
-                " RIGHT JOIN contractfundamentals cfs on c.kConId = cfs.fConId "+\
-                " WHERE cfs.fConId = '" + str(cnt.conId) + "' AND cfs.fAccId = '" + str(accid) + "' AND cfs.fDate < DATE(NOW()) "+\
-                " AND DATEDIFF(c.kEarningsDate, DATE(NOW())) >  " + str(cf.mydaystoearnings) +\
-                " ORDER BY cfs.fDate DESC LIMIT 1 "
-            rst = execute_query(db, sql)
-            if rst != [] and targetprice > 0:
+            bolb, bols = (cf.myaction == 'BUY'), (cf.myaction == 'SELL')        # booleans per decidir què fem
+            oldtargetprice = ibdb.getprevioustargetprice(db, cnt.conId, accid)
+            earningsdate = ibdb.getearningsdate(db, cnt.conId, cnt.symbol)
+            daystoearnings = (earningsdate - date.today()).days
+            if date.today().weekday() > 2: daystoearnings -= 2      # tenim en compte el cap de setmana
+            isopen = ibdb.positionisopen(db,accid, cnt.symbol)                  # mirem si està ja oberta
+            #si no hi ha target prices o la data d'earnings és massa aprop, no fem res
+            if oldtargetprice * targetprice != 0 and not isopen and daystoearnings > cf.mydaystoearnings:
                 # si scancode = HIGH_VS_52W_HL i la distància al hign és <= que un 1%
                 # i TargetPrice > el que està guardat a la base de dades que no és d'avui
-                if scancode == 'HIGH_VS_52W_HL' and float(frac52w) >= cf.my52whighfrac and targetprice > rst[0][0]:
+                if scancode == 'HIGH_VS_52W_HL' and float(frac52w) >= cf.my52whighfrac and targetprice > oldtargetprice:
                     print("Open new HIGH_VS_52W_HL -  Put ", cnt.symbol)
                     if cf.myaction == "BOTH":
                         listorders.append(opennewoption(ib, db, cnt, "SELL", "P", cf.myoptselldte,scancode))
@@ -238,7 +294,7 @@ def processpreselectedstocks(ib, db, accid, stklst, scancode):
                     elif cf.myaction in ['BUY', 'SELL']:
                         listorders.append(opennewoption(ib, db, cnt, cf.myaction, (bols and "P") or (bolb and "C"),
                                                         bolb*cf.myoptbuydte + bols*cf.myoptselldte, scancode))
-                elif scancode == 'LOW_VS_52W_HL' and float(frac52w) <= cf.my52wlowfrac and targetprice < rst[0][0]:
+                elif scancode == 'LOW_VS_52W_HL' and float(frac52w) <= cf.my52wlowfrac and targetprice < oldtargetprice:
                     print("Open new LOW_VS_52W_HL -  Call ", cnt.symbol)
                     if cf.myaction == "BOTH":
                         listorders.append(opennewoption(ib, db, cnt, "SELL", "C", cf.myoptselldte,scancode))
@@ -249,7 +305,7 @@ def processpreselectedstocks(ib, db, accid, stklst, scancode):
                 else:
                     print("No action required for Stock:   ", cnt.conId, ' ', cnt.symbol,
                         "Scan Code: ", stklst[i][0], "frac52w: ", frac52w, " New Target Price: ", targetprice,
-                          "Old Target Price: ", rst[0][0])
+                          "Old Target Price: ", oldtargetprice)
             elif targetprice <= 0:
                 print("No target price for Stock ", cnt.conId, ' ', cnt.symbol)
             else:
@@ -345,21 +401,6 @@ def opennewoption(ib, db, cnt, opttype, optright, optdaystoexp, scancode):
         raise
 
 
-def openpositions(ib, db, accid):
-    try:
-        scansel = scanselection(db)
-        scancode, scandesc = scansel[0], scansel[1]
-        # getscannedstocks torna una llista de Contracts
-        scannedstocklist = getscannedstocks(ib, scandesc)
-        # fill fundamentals omple les llistes [contract(i), fundamentals(i)]
-        scannedstocklist = fillfundamentals(ib, db, scannedstocklist)
-        ibdb.dbfill_fundamentals(db, accid, scannedstocklist)
-        return processpreselectedstocks(ib, db, accid, scannedstocklist, scancode)
-    except Exception as err:
-        #error_handling(err)
-        raise
-
-
 # passem limit order. Torna una list amb les ordres llençades
 # # scode = ScanCode i tType = TraeType són paràmetres opcionals per poder posar-los a la taula orders
 def tradelimitorder(ib, db, contract, quantity, price, scode= None, ttype = None):
@@ -378,6 +419,59 @@ def tradelimitorder(ib, db, contract, quantity, price, scode= None, ttype = None
         #error_handling(err)
         raise
 
+
+def openpositions_fromscan(ib, db, accid, scansel):
+    try:
+        scancode, scandesc = scansel[0], scansel[1]
+        # getscannedstocks torna una llista de Contracts
+        scannedstocklist = getscannedstocks(ib, scandesc)
+        # fill fundamentals omple les llistes [contract(i), fundamentals(i)]
+        scannedstocklist = fillfundamentals(ib, db, scannedstocklist)
+        ibdb.dbfill_fundamentals(db, accid, scannedstocklist)
+        return processscannedstocks(ib, db, accid, scannedstocklist, scancode)
+    except Exception as err:
+        #error_handling(err)
+        raise
+
+
+def openpositions_fromwikipedia(ib, db, accid, scancode):
+    try:
+        tickers = save_tickers('http://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
+        # tickers= save_tickers('https: // en.wikipedia.org / wiki / NASDAQ - 100  # Components')
+        # tickers= save_tickers('https://www.nasdaq.com/quotes/nasdaq-100-stocks.aspx')
+
+        for ticker in tickers:
+            cnt = ibsync.Contract(symbol=ticker, secType=cf.myscaninstrument, currency=cf.mycurrency, exchange=cf.myprefexchange)
+            isopen = ibdb.positionisopen(db, accid, ticker)
+            if ib.qualifyContracts(cnt) != [] and not isopen:
+                try:
+                    breakout = requesthistoricaldata(ib, cnt, cf.myprdnum, cf.myprdscale, cf.mybarsixe)
+                except ValueError as e:
+                    print(e, cnt)
+                    continue
+                if breakout > 0:
+                    ibdb.dbfill_fundamentals (db, accid, fillfundamentals(ib, db, [cnt]))
+                    opennewoption(ib, db, cnt, "SELL", "P", cf.myoptselldte, scancode)
+                elif breakout < 0:
+                    ibdb.dbfill_fundamentals(db, accid, fillfundamentals(ib, db, [cnt]))
+                    opennewoption(ib, db, cnt, "SELL", "C", cf.myoptselldte, scancode)
+    except Exception as err:
+        #error_handling(err)
+        raise
+
+
+def openpositions(ib, db, accid):
+    try:
+        scansel = scanselection(db)
+        if scansel[2] == "S":
+            openpositions_fromscan(ib, db, accid, scansel[0:2])
+        elif scansel[2] == "W":
+            openpositions_fromwikipedia(ib, db, accid, scansel[0])
+        else:
+            print("Scan de tipus desconegut! ")
+    except Exception as err:
+        #error_handling(err)
+        raise
 
 
 # Strategy #1: Strategy VXX 70/30 Short Call Strategy (Course: Entry Level And Highly Profitable Options Trading Strategy):
@@ -406,40 +500,40 @@ def branco_strategy1(ib,db, accid):
         ishort = int(min(range(len(deltas)), key=lambda i: abs(deltas[i] - 0.7)))
         ilong = int(min(range(len(deltas)), key=lambda i: abs(deltas[i] - 0.3)))
 
-        combo = ibsync.Contract()
-        combo.symbol = "VXX"
-        combo.secType = "BAG"
-        combo.exchange = "SMART"
-        combo.currency = "USD"
+        #combo = ibsync.Contract()
+        #combo.symbol = "VXX"
+        #combo.secType = "BAG"
+        #combo.exchange = "SMART"
+        #combo.currency = "USD"
 
-        leg1 = ibsync.ComboLeg ()
-        leg1.conId = contracts[ishort]
-        leg1.ratio = 1
-        leg1.action = "SELL"
-        leg1.exchange = "SMART"
+        #leg1 = ibsync.ComboLeg ()
+        #leg1.conId = contracts[ishort]
+        #leg1.ratio = 1
+        #leg1.action = "SELL"
+        #leg1.exchange = "SMART"
 
-        leg2 = ibsync.ComboLeg()
-        leg2.conId = contracts[ilong]
-        leg2.ratio = 1
-        leg2.action = "BUY"
-        leg2.exchange = "SMART"
+        #leg2 = ibsync.ComboLeg()
+        #leg2.conId = contracts[ilong]
+        #leg2.ratio = 1
+        #leg2.action = "BUY"
+        #leg2.exchange = "SMART"
 
-        combo.comboLegs = []
-        combo.comboLegs.append(leg1)
-        combo.comboLegs.append(leg2)
+        #combo.comboLegs = []
+        #combo.comboLegs.append(leg1)
+        #combo.comboLegs.append(leg2)
 
-        order = ibsync.order.LimitOrder("BUY", 1, 1, tif="GTC", transmit=False)
-        trade = ib.placeOrder(combo, order)
-
-        #combo = ibsync.Contract(symbol='VXX', secType='BAG', exchange='SMART', currency='USD',
-        #                 comboLegs=[
-        #                     ibsync.ComboLeg(conId=contracts[ishort], ratio=1, action='SELL', exchange='SMART'),
-        #                     ibsync.ComboLeg(conId=contracts[ilong], ratio=1, action='BUY', exchange='SMART')
-        #                 ]
-        #                 )
-        #trade = tradelimitorder(ib, db, combo, 1, 1, "BRANCO_1")
-        #order = ibsync.LimitOrder(action='SELL', totalQuantity=1, lmtPrice=1, transmit=False, account=accid)
+        #order = ibsync.order.LimitOrder("BUY", 1, 1, tif="GTC", transmit=False)
         #trade = ib.placeOrder(combo, order)
+
+        combo = ibsync.Contract(symbol='VXX', secType='BAG', exchange='SMART', currency='USD',
+                         comboLegs=[
+                             ibsync.ComboLeg(conId=contracts[ishort], ratio=1, action='SELL', exchange='SMART'),
+                             ibsync.ComboLeg(conId=contracts[ilong], ratio=1, action='BUY', exchange='SMART')
+                         ]
+                         )
+        trade = tradelimitorder(ib, db, combo, 1, 1, "BRANCO_1")
+        order = ibsync.LimitOrder(action='SELL', totalQuantity=1, lmtPrice=1, transmit=False, account=accid)
+        trade = ib.placeOrder(combo, order)
         print(trade)
     except Exception as err:
         # error_handling(err)
